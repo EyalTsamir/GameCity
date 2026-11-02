@@ -2224,7 +2224,7 @@ function shoulderTop(d: Dims, x: number): P3 {
 }
 
 /** close level: a strap that hugs the torso (each point pushed out to the torso surface + off) */
-function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: number): void {
+function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: number, ctrl?: P3): void {
   if (!cfg.close) {
     stick(b, p0, p1, wdt);
     return;
@@ -2251,7 +2251,10 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
   // a flat webbing ribbon (outer face + edges) along the surface
   const N = 8;
   const pts: P3[] = [];
-  for (let i = 0; i <= N; i++) pts.push(out(lerp3(p0, p1, i / N)));
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    pts.push(out(ctrl ? lerp3(lerp3(p0, ctrl, t), lerp3(ctrl, p1, t), t) : lerp3(p0, p1, t)));
+  }
   const cz = T[8].cz;
   const half = wdt * 1.6,
     th = wdt * 0.35;
@@ -2393,11 +2396,26 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
             strapPath(b, d, cfg, [0.1 * s * hk, r8.y, r8.cz - r8.b - 0.012], top, 0.01 * hk);
             strapPath(b, d, cfg, top, [0.105 * s * hk, r7.y - 0.03 * hk, r7.cz + r7.f + 0.008 + d.bust[7] * 0.7], 0.01 * hk);
           } else {
-            const chest = strapOver(b, d, 0.098 * s * hk, 8, 7, 0.01 * hk).front;
             const r5 = d.torso[5];
             const side: P3 = [s * r5.hw * 0.98, r5.y + 0.01 * hk, r5.cz + r5.f * 0.25];
-            strapPath(b, d, cfg, chest, side, 0.008 * hk);
-            strapPath(b, d, cfg, side, [0.11 * s * hk, r5.y - 0.02 * hk, r5.cz - r5.b - 0.01], 0.008 * hk);
+            if (sweepPeople('straps')) {
+              // padded down the front of the shoulder, clear of the bust; a buckle; thin webbing from there, running round the ribs in one curve
+              const x = 0.112 * s * hk;
+              const r8f = d.torso[8];
+              const chest = strapOver(b, d, x, 8, 8, 0.01 * hk).front;
+              const below: P3 = [chest[0], chest[1] - 0.012 * hk, chest[2]];
+              const r6 = d.torso[6];
+              strapPath(b, d, cfg, below, side, 0.0052 * hk, [x * 1.1, r6.y + 0.01 * hk, r6.cz + r6.f]);
+              strapPath(b, d, cfg, side, [0.11 * s * hk, r5.y - 0.02 * hk, r5.cz - r5.b - 0.01], 0.0052 * hk);
+              b.use(BONE.CHEST, REG.DARK, FB.BACKPACK, 1);
+              const bk = add(chest, [0, -0.008 * hk, 0.0045 + r8f.f * 0.002]);
+              softBox(b, bk, [0.024 * hk, 0.014 * hk, 0.005]);
+              b.use(BONE.CHEST, REG.STRAP, FB.BACKPACK, 0.7);
+            } else {
+              const chest = strapOver(b, d, 0.098 * s * hk, 8, 7, 0.01 * hk).front;
+              strapPath(b, d, cfg, chest, side, 0.008 * hk);
+              strapPath(b, d, cfg, side, [0.11 * s * hk, r5.y - 0.02 * hk, r5.cz - r5.b - 0.01], 0.008 * hk);
+            }
           }
         }
       }

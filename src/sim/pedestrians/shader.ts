@@ -19,6 +19,7 @@ const CURLS = sweepPeople('curls');
 const SOFTLINE = sweepPeople('softline');
 const HF_LIFT = sweepPeople('hairfall') ? '1.0' : '0.0';
 const FE0 = sweepPeople('hairfall') ? '0.66' : '0.98';
+const SEAMH = sweepPeople('seamdots') ? '0.0004' : '0.0014';
 const HC = sweepPeople('hatcloth') ? 'true' : 'false';
 const VS_BRIM = sweepPeople('hatform') ? "{\n        // no hat brim is a flat disc: straw and cotton wander (every hat its own way), a fedora snaps down in front and rolls up at the sides, a hard hat's peak is at the front only\n        float wv = sin(phi * 2.0 + float(h3 & 63u) * 0.1) + 0.6 * sin(phi * 3.0 + float((h3 >> 6u) & 63u) * 0.1);\n        if (st == 3u || st == 7u) p.y += s * s * 0.007 * wv;\n        else if (st == 4u) p.y += s * s * (0.016 * sin(phi) * sin(phi) - 0.012 * cos(phi) + 0.004 * wv);\n        else if (st == 5u) p.xz -= rad * s * hb.x * 0.72 * (1.0 - smoothstep(0.1, 1.0, cos(phi)));\n      }" : '';
 const VS_CROWN = sweepPeople('hatform') ? "{\n        // the crown's own form: a fedora's pinch and dents, a hard hat's ridge, a beanie's turned-up cuff\n        float xn = p.x;\n        if (st == 4u) p.y -= top * top * (0.016 * exp(-xn * xn / 0.0006) + 0.006 * exp(-(abs(xn) - 0.04) * (abs(xn) - 0.04) / 0.0003) * smoothstep(-0.02, 0.05, p.z));\n        else if (st == 5u) p.y += 0.0035 * exp(-xn * xn / 0.00012) * smoothstep(0.1, 0.5, s);\n        else if (st == 6u) p.xz += rad * 0.0035 * (1.0 - smoothstep(0.26, 0.3, s));\n      }" : '';
@@ -146,6 +147,27 @@ export const GLSL_FOOT_R = `    float fy = left ? -P_footYawL : P_footYawR;
       mat3 sh = pedHipR(left) * pedRX(left ? P_kneeL : P_kneeR);
       rf = transpose(sh) * pedRY(fy) * sh * rf;
     }`;
+// where arm and torso cut each other at the shoulder they share one normal field (a ball round the shoulder, as the hips have), or the arm reads as
+// a sausage stuck on the body; and the shoulder rolls with the arm: forward with a swing, up with a raised arm, the torso's edge going with it.
+// Only the cap and the torso round it move, not the arm's pivot: every grip's IK stays right.
+const SHOULDERS = sweepPeople('shoulders') ? `
+  if (bone != ${B.HEAD}) {
+    bool shL = p.x > 0.0;
+    vec3 shC = pedPivS(${PIV.SHOULDER}, shL);
+    float shD = length(p - shC);
+    if (shD < 0.135) {
+      float shFl = shL ? P_shFlexL : P_shFlexR, shAb = shL ? P_shAbdL : P_shAbdR;
+      if (region == ${R.TORSO} || region == ${R.ARM}) {
+        vec3 ball = p - vec3(shC.x * 0.62, shC.y - 0.02, shC.z);
+        n = normalize(mix(n, normalize(ball), 0.92 * (1.0 - smoothstep(0.05, 0.11, shD))));
+      }
+      // (everything on the chest there goes along: a strap or a collar left behind cut into the cloth)
+      float shK = 1.0 - smoothstep(0.045, 0.13, shD);
+      p.y += shK * (0.018 * smoothstep(0.4, 1.6, shAb) + 0.012 * smoothstep(0.8, 2.2, shFl));
+      p.z += shK * 0.014 * clamp(shFl, -0.6, 1.0);
+    }
+  }
+` : '';
 /** everything the joint rotations need (the program declares iP0..iP5 and uPedPiv) */
 export const PED_JOINT_GLSL = [GLSL_U2, GLSL_RX, GLSL_RY, GLSL_RZ, PDEFS, GLSL_PIV, GLSL_HIP, GLSL_SHOULDER].join('\n');
 
@@ -401,6 +423,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
     vPedGaze = vec3((float(gz & 63u) / 31.5 - 1.0) * 0.62, (float((gz >> 6u) & 31u) / 15.5 - 1.0) * 0.42, float((gz >> 11u) & 31u) / 31.0);
   }
   if (bone == ${B.HEAD}) pedSunLift = 0.34;
+  ${SHOULDERS}
   if (region == ${R.TORSO} || region == ${R.LEG}) {
     float hipK = region == ${R.TORSO} ? 1.0 - smoothstep(0.26, 0.42, h) : smoothstep(0.72, 0.88, h);
     if (hipK > 0.0) {
@@ -1432,7 +1455,7 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   pc += vec3(0.03, 0.032, 0.036) * clamp(fold / 0.0025, 0.0, 1.0) * darkC * det * cloth * uPedFolds;
 #ifdef PED_CLOSE
   // (seams one or two pixels wide: as a height they came out as a row of dots from the 2×2 derivatives)
-  pedFabH = ((sh - 1.0) * 0.0014 + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
+  pedFabH = ((sh - 1.0) * ${SEAMH} + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
 #else
   pedFabH = ((sh - 1.0) * 0.0065 + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
 #endif
