@@ -2,6 +2,7 @@
 // of the walking paths and the sunbathing spots around beach-path ends), beach balls, kayaks,
 // sandcastles; plus the ferry dock (floating pontoon, hinged gangway, shelter, lights).
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import { WATER_LEVEL } from '../../core/constants';
 import { distToSegment, type P2, type Rect } from '../../core/geom';
@@ -50,6 +51,72 @@ function faceQuad(b: HB, cx: number, cy: number, cz: number, dx: number, dz: num
   const tx = dz * w,
     tz = -dx * w;
   b.quad([cx - tx, cy - h, cz - tz], [cx + tx, cy - h, cz + tz], [cx + tx, cy + h, cz + tz], [cx - tx, cy + h, cz - tz]);
+}
+
+/** A rescue board standing on its tail at y = 0 in the current frame, length up y, deck toward +z: a pointed nose lifting forward, a round
+ *  tail, domed deck, flatter hull, a stripe, a skeg, and the cord that runs round the rail. */
+function rescueBoard(b: HB, L: number, W: number, T: number, col: string, stripe: string): void {
+  const N = 16,
+    R = 10;
+  const half = (t: number) => (W / 2) * Math.pow(Math.sin(Math.PI * Math.pow(t, 0.8)), 0.62);
+  const lift = (t: number) => (t > 0.62 ? 0.17 * ((t - 0.62) / 0.38) ** 2 : 0);
+  const at = (t: number) => Math.max(0.012, half(t));
+  const deckZ = (t: number, u: number) => lift(t) + (T / 2) * Math.sqrt(Math.max(0, 1 - u * u));
+  b.color(col);
+  const ids: number[] = [];
+  for (let i = 0; i <= N; i++) {
+    const t = 0.003 + (i / N) * 0.994;
+    const w = at(t);
+    for (let j = 0; j < R; j++) {
+      const a = (j / R) * Math.PI * 2;
+      const c = Math.cos(a),
+        s = Math.sin(a);
+      const zk = s > 0 ? T / 2 : T * 0.3;
+      ids.push(b.vtx(c * w, t * L, lift(t) + s * zk * (w / (W / 2)) ** 0.4, c / w, 0, s / zk));
+    }
+  }
+  for (let i = 0; i < N; i++)
+    for (let j = 0; j < R; j++) {
+      const a0 = ids[i * R + j],
+        a1 = ids[i * R + ((j + 1) % R)],
+        b0 = ids[(i + 1) * R + j],
+        b1 = ids[(i + 1) * R + ((j + 1) % R)];
+      b.tri(a0, a1, b0);
+      b.tri(a1, b1, b0);
+    }
+  // the stripe down the deck, tapering with the board
+  b.color(stripe);
+  let p0 = 0,
+    p1 = 0;
+  for (let i = 0; i <= 14; i++) {
+    const t = 0.06 + (i / 14) * 0.88;
+    const sw = 0.2 * at(t);
+    const u = sw / at(t);
+    const y = t * L;
+    const z = deckZ(t, u) * 1 + 0.0035;
+    const q0 = b.vtx(-sw, y, z, 0, 0, 1),
+      q1 = b.vtx(sw, y, z, 0, 0, 1);
+    if (i > 0) {
+      b.tri(p0, p1, q0);
+      b.tri(p1, q1, q0);
+    }
+    p0 = q0;
+    p1 = q1;
+  }
+  // the skeg under the tail
+  b.color('#2b2f33');
+  b.quad2([0, L * 0.05, -T * 0.25], [0, L * 0.17, -T * 0.25], [0, L * 0.09, -T * 0.25 - 0.12], [0, L * 0.05, -T * 0.25 - 0.11]);
+  // the cord, slack between its fixings
+  b.color('#e9e4d6');
+  for (const sd of [-1, 1]) {
+    const pts: V3[] = [];
+    for (let i = 0; i <= 12; i++) {
+      const t = 0.22 + (i / 12) * 0.5;
+      const sag = 0.018 * Math.abs(Math.sin(i * 0.5 * Math.PI * 0.67));
+      pts.push([sd * (at(t) + 0.004 + sag), t * L, lift(t) + 0.004]);
+    }
+    b.tube(pts, 0.005, 4);
+  }
 }
 
 export function lifeguardTower(b: HB, x: number, z: number, yaw: number, ground: Ground): void {
@@ -148,12 +215,19 @@ export function lifeguardTower(b: HB, x: number, z: number, yaw: number, ground:
     b.color('#f4f1e8');
     for (const a of [0.7, 2.3, 3.9, 5.5]) b.box(0.62 + Math.cos(a) * 0.25, deck + 0.58 + Math.sin(a) * 0.25, 1.55, 0.11, 0.11, 0.115, a, 0);
     // a rescue board leaning on a stilt
-    b.color('#e8b62a');
-    b.pushT(0.98, 0, 1.05, 0, -0.16);
-    b.box(0, deck - 1.02, 0, 0.5, 2.5, 0.07, 0, 0);
-    b.color('#c43b2b');
-    b.box(0, deck - 1.02, 0.04, 0.09, 2.45, 0.012, 0, 0);
-    b.pop();
+    if (shapeOn('shapeboards')) {
+      // its tail in the sand, its back against the stilt
+      b.pushT(0.98, gy - 0.05, 0.86, 0, -0.16);
+      rescueBoard(b, 2.6, 0.52, 0.09, '#e8b62a', '#c43b2b');
+      b.pop();
+    } else {
+      b.color('#e8b62a');
+      b.pushT(0.98, 0, 1.05, 0, -0.16);
+      b.box(0, deck - 1.02, 0, 0.5, 2.5, 0.07, 0, 0);
+      b.color('#c43b2b');
+      b.box(0, deck - 1.02, 0.04, 0.09, 2.45, 0.012, 0, 0);
+      b.pop();
+    }
     // binoculars on a post at the corner of the rail
     b.color('#2b2f33');
     b.vcyl(-0.55, deck + 0.9, 1.5, 0.018, 0.22, 6, 0);
@@ -180,10 +254,16 @@ export function lifeguardTower(b: HB, x: number, z: number, yaw: number, ground:
     rp.push([Math.cos(a) * 0.28, deck + 0.6 + Math.sin(a) * 0.28, 1.56]);
   }
   b.tube(rp, 0.07, 5);
-  b.color('#f2c94c');
-  b.pushT(-1.25, gy + 1.1, 0.9, 0, 0, 0.25);
-  b.box(0, 0, 0, 0.12, 2.3, 0.55, 0, 0);
-  b.pop();
+  if (shapeOn('shapeboards')) {
+    b.pushT(-1.76, gy - 0.05, 0.9, Math.PI / 2, 0.26);
+    rescueBoard(b, 2.35, 0.55, 0.1, '#f2c94c', '#f4f1e8');
+    b.pop();
+  } else {
+    b.color('#f2c94c');
+    b.pushT(-1.25, gy + 1.1, 0.9, 0, 0, 0.25);
+    b.box(0, 0, 0, 0.12, 2.3, 0.55, 0, 0);
+    b.pop();
+  }
   b.pop();
 }
 

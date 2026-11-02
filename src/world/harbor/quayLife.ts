@@ -4,6 +4,7 @@
 // in hi-vis during working hours. Everything sits between the crane rails or on the coping, clear of the ladders and the ship's
 // gangway; the big pieces are solid for the walker (occupancy).
 
+import { shapeOn } from '../../core/sweepshape';
 import type { CityContext } from '../../core/context';
 import { OCC } from '../../core/occupancy';
 import type { Rng } from '../../core/rng';
@@ -38,6 +39,15 @@ function paint(b: HB, x0: number, z0: number, x1: number, z1: number, y: number,
 }
 
 function steelDrum(b: HB, x: number, y: number, z: number, col: string): void {
+  if (shapeOn('shapedrums')) {
+    // one spun profile: rolled chimes standing proud of the lids, two swaged rolling hoops; the bung and vent caps on the lid
+    b.color(col);
+    b.lathe([[0.27, 0], [0.292, 0.002], [0.296, 0.014], [0.288, 0.03], [0.285, 0.05], [0.285, 0.285], [0.297, 0.3], [0.285, 0.315], [0.285, 0.565], [0.297, 0.58], [0.285, 0.595], [0.285, 0.83], [0.288, 0.85], [0.296, 0.866], [0.292, 0.878], [0.275, 0.878], [0.268, 0.862], [0, 0.862]], 22, x, y, z);
+    b.color('#2c2e30');
+    b.lathe([[0.04, 0.862], [0.04, 0.876], [0.03, 0.88], [0, 0.88]], 10, x + 0.14, y, z + 0.08);
+    b.lathe([[0.024, 0.862], [0.024, 0.874], [0, 0.876]], 8, x - 0.15, y, z - 0.06);
+    return;
+  }
   b.color(col);
   b.vcyl(x, y, z, 0.29, 0.88, 12, 2);
   b.color('#2c2e30');

@@ -4,6 +4,8 @@
 // 'vendor'). The carts are one merged static mesh (one draw call + its shadow), lamp-lit at night.
 
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
+import { shapeOn } from '../../core/sweepshape';
 import type { CityContext } from '../../core/context';
 import { OCC } from '../../core/occupancy';
 import type { Rng } from '../../core/rng';
@@ -314,6 +316,308 @@ class Sink {
   }
 }
 
+const _q = new THREE.Quaternion();
+const _up = new THREE.Vector3(0, 1, 0);
+const _v = new THREE.Vector3();
+
+// ── carts made by someone (?noshapecarts: the earlier boxes) ──
+
+const CHROME = '#c6c9cc';
+const TYRE = '#26282b';
+
+/** a box whose corners were bent or moulded, smooth from one face into the next */
+function rbox(s: Sink, w: number, h: number, d: number, x: number, y: number, z: number, color: string, r: number, seg = 2): void {
+  const g = new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w * 0.49, h * 0.49, d * 0.49));
+  g.translate(x, y + h / 2, z);
+  s.add(g, color);
+}
+
+/** a tube between two points */
+function bar(s: Sink, a: [number, number, number], b: [number, number, number], r: number, color: string, seg = 6): void {
+  const dx = b[0] - a[0],
+    dy = b[1] - a[1],
+    dz = b[2] - a[2];
+  const L = Math.hypot(dx, dy, dz);
+  const g = new THREE.CylinderGeometry(r, r, L, seg, 1, true);
+  g.applyQuaternion(_q.setFromUnitVectors(_up, _v.set(dx / L, dy / L, dz / L)));
+  g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2);
+  s.add(g, color);
+}
+
+/** a spoked cart wheel on an axle along x, centre (x, y, z) */
+function wheel(s: Sink, x: number, y: number, z: number, r: number, spokes = 8): void {
+  const t = new THREE.TorusGeometry(r - 0.016, 0.018, 5, 18);
+  t.rotateY(Math.PI / 2);
+  t.translate(x, y, z);
+  s.add(t, TYRE);
+  const rim = new THREE.TorusGeometry(r - 0.036, 0.008, 4, 18);
+  rim.rotateY(Math.PI / 2);
+  rim.translate(x, y, z);
+  s.add(rim, CHROME);
+  const hub = new THREE.CylinderGeometry(0.028, 0.028, 0.05, 8);
+  hub.rotateZ(Math.PI / 2);
+  hub.translate(x, y, z);
+  s.add(hub, '#55585c');
+  for (let i = 0; i < spokes; i++) {
+    const a = (i / spokes) * Math.PI * 2;
+    bar(s, [x, y, z], [x, y + Math.sin(a) * (r - 0.04), z + Math.cos(a) * (r - 0.04)], 0.0045, CHROME, 3);
+  }
+}
+
+/** one scoop: a ball that was pressed out of the paddle, so it has a torn skirt round its foot and a few ridges */
+function scoop(s: Sink, r: number, x: number, y: number, z: number, color: string, seed: number): void {
+  const g = new THREE.SphereGeometry(r, 10, 7);
+  const P = g.getAttribute('position') as THREE.BufferAttribute;
+  for (let i = 0; i < P.count; i++) {
+    const px = P.getX(i) / r,
+      py = P.getY(i) / r,
+      pz = P.getZ(i) / r;
+    const a = Math.atan2(pz, px);
+    const ridge = Math.sin(a * 3 + py * 5 + seed) * 0.05 + Math.sin(a * 7 - py * 3 + seed * 2) * 0.03;
+    const skirt = py < -0.3 ? (1 + Math.sin(a * 5 + seed * 3) * 0.5) * 0.2 * (-py - 0.3) : 0;
+    const k = r * (1 + ridge + skirt);
+    P.setXYZ(i, px * k, py * r * 0.86, pz * k);
+  }
+  g.computeVertexNormals();
+  g.translate(x, y, z);
+  s.add(g, color);
+}
+
+/** a domed parasol: gores between ribs, a scalloped valance, the runner on its pole */
+function domeParasol(s: Sink, r: number, y: number, x: number, z: number, c0: string, c1: string): void {
+  const n = 8;
+  const sag = 0.44;
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * Math.PI * 2,
+      da = (Math.PI * 2) / n;
+    const g = new THREE.SphereGeometry(r, 3, 5, a0, da, 0, Math.PI * 0.45);
+    g.scale(1, sag, 1);
+    g.translate(x, y - sag * r * Math.cos(Math.PI * 0.45) + 0.0, z);
+    // the cloth from underneath, in its own shade
+    const un = g.clone();
+    const I = un.index as THREE.BufferAttribute;
+    for (let q = 0; q < I.count; q += 3) {
+      const a = I.getX(q);
+      I.setX(q, I.getX(q + 1));
+      I.setX(q + 1, a);
+    }
+    const NN = un.getAttribute('normal') as THREE.BufferAttribute;
+    for (let q = 0; q < NN.count; q++) NN.setXYZ(q, -NN.getX(q), -NN.getY(q), -NN.getZ(q));
+    s.add(un, shadeHex(i % 2 ? c0 : c1, 0.72));
+    s.add(g, i % 2 ? c0 : c1);
+    // the valance hangs from the rim in a shallow scallop
+    const rimY = y;
+    const v0 = new THREE.BufferGeometry();
+    const pos: number[] = [];
+    const nrm: number[] = [];
+    const R = r * Math.sin(Math.PI * 0.45);
+    const k = 6;
+    for (let j = 0; j <= k; j++) {
+      const t = j / k;
+      const a = a0 + t * da;
+      const cx = Math.sin(a),
+        cz = Math.cos(a);
+      const drop = 0.05 + 0.055 * Math.sin(t * Math.PI);
+      pos.push(x + cx * R, rimY, z + cz * R, x + cx * R, rimY - drop, z + cz * R);
+      nrm.push(cx, 0, cz, cx, 0, cz);
+    }
+    const idx: number[] = [];
+    for (let j = 0; j < k; j++) {
+      const q = j * 2;
+      idx.push(q, q + 1, q + 2, q + 1, q + 3, q + 2, q, q + 2, q + 1, q + 1, q + 2, q + 3);
+    }
+    v0.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    v0.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+    v0.setIndex(idx);
+    s.add(v0, i % 2 ? c0 : c1);
+    // the rib under the seam
+    const ax = Math.sin(a0),
+      az = Math.cos(a0);
+    bar(s, [x + ax * R * 0.98, rimY - 0.01, z + az * R * 0.98], [x + ax * 0.03, y + 0.1 * r, z + az * 0.03], 0.006, CHROME, 3);
+    bar(s, [x + ax * R * 0.48, y + 0.1 * r - 0.03, z + az * R * 0.48], [x, y - 0.42, z], 0.005, CHROME, 3);
+  }
+  s.cyl(0.018, 0.018, y + sag * r * 0.72, x, 0, z, '#d8d4ca', 8);
+  s.cyl(0.03, 0.03, 0.09, x, y - 0.47, z, CHROME, 8);
+  const top = y + sag * r * (1 - Math.cos(Math.PI * 0.45)) + 0.015;
+  const ball = new THREE.SphereGeometry(0.022, 8, 6);
+  ball.translate(x, top, z);
+  s.add(ball, CHROME);
+}
+
+/** the frame a cart is pushed by: two uprights and a grip, on the side away from the customers */
+function pushBar(s: Sink, x0: number, x1: number, y0: number, y1: number, z: number): void {
+  for (const x of [x0, x1]) bar(s, [x, y0, z], [x, y1, z - 0.1], 0.012, CHROME);
+  bar(s, [x0, y1, z - 0.1], [x1, y1, z - 0.1], 0.016, '#2a2c30');
+}
+
+function shapedCart(s: Sink, st: Stall, rng: Rng): void {
+  switch (st.kind) {
+    case 'icecream': {
+      const body = rng.pick(['#f6d6e2', '#cfe8e2', '#f6efd8']);
+      // the enamelled body on its underframe, a coloured band and a chrome rub strip, a door in the back
+      rbox(s, 1.19, 0.05, 0.66, 0, 0.2, 0, '#55585c', 0.015, 1);
+      rbox(s, 1.25, 0.62, 0.72, 0, 0.24, 0, body, 0.05);
+      rbox(s, 1.262, 0.1, 0.732, 0, 0.62, 0, '#e8432e', 0.03, 1);
+      rbox(s, 1.268, 0.014, 0.738, 0, 0.61, 0, CHROME, 0.006, 1);
+      rbox(s, 0.92, 0.3, 0.012, 0, 0.29, 0.36, body, 0.004, 1);
+      rbox(s, 0.72, 0.3, 0.012, 0, 0.29, -0.36, body, 0.004, 1);
+      s.cyl(0.018, 0.018, 0.012, 0.28, 0.44, -0.372, CHROME, 8);
+      // the stainless top, its well, tubs set into it
+      rbox(s, 1.31, 0.04, 0.78, 0, 0.86, 0, '#cfd2d4', 0.018, 1);
+      rbox(s, 1.14, 0.01, 0.46, 0, 0.895, -0.06, '#a7abaf', 0.004, 1);
+      const flav = rng.chance(0.5) ? ['#f3e7c9', '#e7a6b8', '#6e452c', '#b8d88a'] : ['#f6e3a8', '#d87a93', '#7d5233', '#f1efe6'];
+      for (let i = 0; i < 4; i++) {
+        const tx = -0.405 + i * 0.27,
+          tz = -0.06;
+        const rim = new THREE.TorusGeometry(0.112, 0.01, 5, 18);
+        rim.rotateX(Math.PI / 2);
+        rim.translate(tx, 0.91, tz);
+        s.add(rim, CHROME);
+        s.cyl(0.108, 0.108, 0.018, tx, 0.895, tz, flav[i], 16);
+        const c = flav[i];
+        scoop(s, 0.058, tx - 0.04, 0.945, tz + 0.02, c, i * 3 + 1);
+        scoop(s, 0.052, tx + 0.045, 0.94, tz - 0.03, c, i * 3 + 2);
+        if (i % 2 === 0) scoop(s, 0.046, tx + 0.005, 0.99, tz + 0.03, c, i * 3 + 3);
+        // the paddle left standing in it
+        bar(s, [tx + 0.06, 0.93, tz + 0.05], [tx + 0.1, 1.08, tz + 0.09], 0.005, CHROME, 4);
+        rbox(s, 0.026, 0.008, 0.05, tx + 0.104, 1.08, tz + 0.1, '#2a2c30', 0.003, 1);
+      }
+      // the hood, hinged up on the vendor's side
+      rbox(s, 1.16, 0.015, 0.34, 0, 1.1, -0.34, '#dfe2e3', 0.007, 1);
+      for (const x of [-0.56, 0.56]) bar(s, [x, 0.9, -0.28], [x, 1.1, -0.28], 0.007, CHROME, 5);
+      // cones stacked point down in their sleeve, and a tin for the paddles
+      s.cyl(0.042, 0.042, 0.16, 0.56, 0.9, 0.27, CHROME, 12);
+      for (let i = 0; i < 4; i++) {
+        const c = new THREE.ConeGeometry(0.038, 0.12, 10, 1, true);
+        c.rotateX(Math.PI);
+        c.translate(0.56, 1.06 + i * 0.022, 0.27);
+        s.add(c, i % 2 ? '#d8a660' : '#cf9a52');
+      }
+      s.cyl(0.05, 0.05, 0.09, -0.56, 0.9, 0.27, '#b9bcbf', 12);
+      wheel(s, -0.655, 0.2, -0.16, 0.2);
+      wheel(s, 0.655, 0.2, -0.16, 0.2);
+      s.cyl(0.025, 0.025, 0.2, -0.45, 0, 0.26, '#55585c', 8);
+      s.cyl(0.025, 0.025, 0.2, 0.45, 0, 0.26, '#55585c', 8);
+      pushBar(s, -0.5, 0.5, 0.74, 1.0, -0.37);
+      // (clamped to the back of the cart, not up through the tubs)
+      rbox(s, 0.06, 0.05, 0.05, 0, 0.72, -0.385, CHROME, 0.01, 1);
+      domeParasol(s, 1.02, 2.05, 0, -0.415, '#e8432e', '#f7f3ea');
+      break;
+    }
+    case 'juice': {
+      // a trestle table with a cloth, a pyramid of oranges, the press, cups
+      rbox(s, 1.5, 0.04, 0.75, 0, 0.82, 0, '#c9a46e', 0.012, 1);
+      rbox(s, 1.53, 0.66, 0.012, 0, 0.17, 0.375, '#f2a33a', 0.004, 1);
+      for (const x of [-0.7, 0.7]) for (const z of [-0.32, 0.32]) bar(s, [x, 0, z], [x * 0.96, 0.82, z * 0.92], 0.02, '#8a6a44', 6);
+      for (const x of [-0.68, 0.68]) bar(s, [x, 0.3, -0.3], [x, 0.3, 0.3], 0.01, '#8a6a44', 5);
+      for (let k = 0; k < 3; k++)
+        for (let i = 0; i < 4 - k; i++)
+          for (let j = 0; j < 3 - k; j++) {
+            const g = new THREE.SphereGeometry(0.046, 8, 6);
+            g.translate(-0.55 + (i + k * 0.5) * 0.095, 0.905 + k * 0.078, -0.1 + (j + k * 0.5) * 0.095);
+            s.add(g, (i + j + k) % 3 === 0 ? '#f39a1c' : '#ee8d18');
+          }
+      rbox(s, 0.22, 0.05, 0.2, 0.32, 0.86, -0.05, '#9aa0a4', 0.015, 1);
+      bar(s, [0.27, 0.9, -0.1], [0.27, 1.26, -0.1], 0.012, CHROME);
+      bar(s, [0.37, 0.9, -0.1], [0.37, 1.26, -0.1], 0.012, CHROME);
+      rbox(s, 0.16, 0.05, 0.05, 0.32, 1.25, -0.1, '#70757a', 0.012, 1);
+      s.cyl(0.075, 0.06, 0.06, 0.32, 1.02, -0.02, CHROME, 14);
+      bar(s, [0.4, 1.27, -0.1], [0.56, 1.34, -0.1], 0.009, '#2a2c30');
+      s.cyl(0.07, 0.07, 0.11, 0.32, 0.9, 0.05, '#f39a1c', 14);
+      for (let i = 0; i < 4; i++) s.cyl(0.03, 0.036, 0.09, 0.03 + i * 0.075, 0.86, 0.22, '#f7a73a', 10);
+      rbox(s, 0.5, 0.34, 0.012, 0, 0.98, 0.36, '#fbf3df', 0.004, 1);
+      domeParasol(s, 1.15, 2.1, 0, -0.05, '#f39a1c', '#fbf3df');
+      break;
+    }
+    case 'flowers': {
+      // a barrow: slatted sides on two wheels, zinc buckets of cut flowers in bunches
+      rbox(s, 1.4, 0.05, 0.7, 0, 0.3, 0, '#3f6b4f', 0.012, 1);
+      for (let k = 0; k < 4; k++)
+        for (const z of [-0.345, 0.345]) rbox(s, 1.4, 0.075, 0.018, 0, 0.36 + k * 0.1, z, k % 2 ? '#3a6349' : '#457456', 0.006, 1);
+      for (let k = 0; k < 4; k++) for (const x of [-0.695, 0.695]) rbox(s, 0.018, 0.075, 0.69, x, 0.36 + k * 0.1, 0, k % 2 ? '#3a6349' : '#457456', 0.006, 1);
+      for (const x of [-0.68, 0.68]) for (const z of [-0.33, 0.33]) bar(s, [x, 0.22, z], [x, 0.82, z], 0.014, '#2f5240', 6);
+      wheel(s, -0.73, 0.26, 0, 0.26, 10);
+      wheel(s, 0.73, 0.26, 0, 0.26, 10);
+      bar(s, [-0.73, 0.26, 0], [0.73, 0.26, 0], 0.012, '#55585c', 6);
+      for (const x of [-0.55, 0.55]) bar(s, [x, 0, -0.3], [x, 0.3, -0.3], 0.018, '#2f5240', 6);
+      pushBar(s, -0.42, 0.42, 0.6, 0.98, -0.36);
+      const fl = ['#e8649a', '#f2c84b', '#e8574f', '#b46ad6', '#f5f0e6', '#f08a3c', '#8f9ee8', '#d23c5a'];
+      for (let i = 0; i < 4; i++)
+        for (let j = 0; j < 2; j++) {
+          const x = -0.48 + i * 0.32,
+            z = -0.15 + j * 0.3;
+          const by = 0.76;
+          s.cyl(0.095, 0.125, 0.25, x, by, z, '#8b939a', 14);
+          const rim = new THREE.TorusGeometry(0.125, 0.005, 4, 14);
+          rim.rotateX(Math.PI / 2);
+          rim.translate(x, by + 0.25, z);
+          s.add(rim, '#a3aab0');
+          const c = fl[(i * 2 + j) % fl.length];
+          // a bunch: stems out of the water, leaves, heads at different heights, leaning out
+          for (let h = 0; h < 8; h++) {
+            const a = h * 2.4 + i + j * 2;
+            const out = 0.03 + 0.085 * ((h * 37 + i * 11) % 10) * 0.1;
+            const hx = x + Math.cos(a) * out,
+              hz = z + Math.sin(a) * out;
+            const hy = by + 0.42 + ((h * 53 + j * 17) % 10) * 0.016 + j * 0.05;
+            bar(s, [x + Math.cos(a) * 0.02, by + 0.2, z + Math.sin(a) * 0.02], [hx, hy, hz], 0.004, '#4f7a3a', 3);
+            const f = new THREE.SphereGeometry(0.036, 6, 4);
+            f.scale(1, 0.72, 1);
+            f.translate(hx, hy, hz);
+            s.add(f, h % 3 === 2 ? shadeHex(c, 0.82) : c);
+            if (h % 2 === 0) {
+              const lf = new THREE.SphereGeometry(0.03, 5, 3);
+              lf.scale(0.5, 0.18, 1.5);
+              lf.rotateY(a);
+              lf.translate(x + Math.cos(a) * out * 0.8, hy - 0.11, z + Math.sin(a) * out * 0.8);
+              s.add(lf, '#4f7a3a');
+            }
+          }
+        }
+      domeParasol(s, 1.0, 2.0, 0, 0, '#3f6b4f', '#f5f0e6');
+      break;
+    }
+    case 'pretzel': {
+      rbox(s, 1.3, 0.72, 0.68, 0, 0.22, 0, '#b8bdc2', 0.03);
+      for (let i = 0; i < 2; i++) rbox(s, 0.5, 0.5, 0.008, -0.31 + i * 0.62, 0.33, 0.342, '#a9aeb3', 0.004, 1);
+      rbox(s, 1.34, 0.035, 0.72, 0, 0.94, 0, '#d9dcdf', 0.012, 1);
+      // the warm cabinet: a frame with pretzels on pegs behind it, a coffee machine with its spout
+      for (const [x, z] of [[-0.56, -0.13], [0.12, -0.13], [-0.56, 0.24], [0.12, 0.24]]) bar(s, [x, 0.975, z], [x, 1.32, z], 0.008, CHROME, 5);
+      rbox(s, 0.72, 0.012, 0.41, -0.22, 1.32, 0.055, '#dfe3e5', 0.005, 1);
+      rbox(s, 0.68, 0.01, 0.37, -0.22, 0.98, 0.055, '#c9a46e', 0.003, 1);
+      for (let i = 0; i < 4; i++) {
+        const x = -0.47 + i * 0.165;
+        for (const lift of [0, 1]) {
+          if (lift === 1 && i % 2 === 0) continue;
+          // the knot: a loop, and the two arms crossed over it
+          const g = new THREE.TorusGeometry(0.056, 0.016, 5, 14);
+          g.scale(1, 0.82, 0.9);
+          g.rotateX(Math.PI / 2 - 0.25);
+          g.translate(x, 1.03 + lift * 0.11, 0.055);
+          s.add(g, '#a86a2c');
+          bar(s, [x - 0.042, 1.034 + lift * 0.11, 0.09], [x + 0.03, 1.03 + lift * 0.11, 0.02], 0.012, '#9a5f25', 5);
+          bar(s, [x + 0.042, 1.034 + lift * 0.11, 0.09], [x - 0.03, 1.03 + lift * 0.11, 0.02], 0.012, '#9a5f25', 5);
+        }
+      }
+      rbox(s, 0.3, 0.38, 0.3, 0.42, 0.975, -0.1, '#3a3e45', 0.02);
+      rbox(s, 0.2, 0.09, 0.04, 0.42, 1.15, 0.06, '#55585c', 0.01, 1);
+      s.cyl(0.016, 0.012, 0.05, 0.42, 1.1, 0.07, CHROME, 8);
+      s.cyl(0.03, 0.026, 0.05, 0.42, 0.975, 0.08, '#f1efe6', 10);
+      for (const x of [-0.5, 0.5]) wheel(s, x * 1.34, 0.18, -0.18, 0.18);
+      for (const x of [-0.5, 0.5]) s.cyl(0.02, 0.02, 0.22, x, 0, 0.24, '#55585c', 8);
+      pushBar(s, -0.42, 0.42, 0.72, 1.02, -0.35);
+      domeParasol(s, 1.05, 2.05, 0, 0, '#2f6b4f', '#f2efe6');
+      break;
+    }
+    default:
+      cart(s, st, rng);
+  }
+}
+
+function shadeHex(c: string, k: number): string {
+  return '#' + new THREE.Color(c).multiplyScalar(k).getHexString();
+}
+
 function cart(s: Sink, st: Stall, rng: Rng): void {
   switch (st.kind) {
     case 'icecream': {
@@ -413,11 +717,13 @@ function cart(s: Sink, st: Stall, rng: Rng): void {
 export function buildStallMesh(stalls: Stall[], rng: Rng): THREE.Mesh | null {
   if (!stalls.some((st) => st.kind !== 'market')) return null;
   const s = new Sink();
+  const shaped = shapeOn('shapecarts');
   for (const st of stalls) {
     if (st.kind === 'market') continue;
     s.m.makeRotationY(st.yaw);
     s.m.setPosition(st.x, st.y, st.z);
-    cart(s, st, rng);
+    if (shaped) shapedCart(s, st, rng);
+    else cart(s, st, rng);
   }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(s.pos, 3));
@@ -425,7 +731,8 @@ export function buildStallMesh(stalls: Stall[], rng: Rng): THREE.Mesh | null {
   geo.setAttribute('normal', nrm);
   geo.setAttribute('color', new THREE.Float32BufferAttribute(s.col, 3));
   geo.setIndex(s.idx);
-  geo.computeVertexNormals();
+  // (each part already has its own normals, moved with it: rounded corners stay smooth)
+  if (!shaped) geo.computeVertexNormals();
   geo.computeBoundingSphere();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0 });
   patchLampMaterial(mat);

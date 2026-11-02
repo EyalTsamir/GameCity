@@ -7,6 +7,8 @@
 // `k` is the kit the item goes to; big silhouettes are built into `ks` (the shadow-casting kit)
 // where a builder takes one. Glass panes go to `g`.
 
+import { shapeOn } from '../../core/sweepshape';
+import * as CK from '../vegetation/cropkit';
 import type { Rng } from '../../core/rng';
 import { Kit } from './furniture';
 import { cbox, lathe } from './shapes';
@@ -627,6 +629,31 @@ export function washing(k: Kit, rng: Rng, cloth?: Kit): { yaw0: number; R: numbe
 }
 
 /** n raised vegetable beds (2.4 x 1.1) in a row along z. */
+/** the same beds, with what really grows in them (?noshapecrops: the earlier cones and bars) */
+function shapedBed(k: Kit, rng: Rng, z: number, bd: number): void {
+  const sh = k.sh;
+  k.m('#4a3424', 'stone');
+  CK.soilRidge(sh, -1.1, z, 1.1, z, 0.25, bd - 0.2, rng);
+  const at = (x: number, zz: number, draw: () => void): void => {
+    sh.push().local(x, 0.34, z + zz);
+    draw();
+    sh.pop();
+  };
+  const crop = rng.int(0, 3);
+  k.m('#7fb04a', 'wood');
+  if (crop === 0) {
+    const kale = rng.chance(0.5);
+    for (let i = 0; i < 5; i++) for (const zz of [-0.25, 0.25]) at(-0.9 + i * 0.45, zz, () => (kale ? CK.cabbage(sh, rng) : CK.lettuce(sh, rng)));
+  } else if (crop === 1) {
+    for (const x of [-0.6, 0.6]) at(x, 0, () => CK.beans(sh, rng));
+  } else if (crop === 2) {
+    const onions = rng.chance(0.5);
+    for (const zz of [-0.3, 0, 0.3]) for (let x = -0.95; x < 1; x += onions ? 0.15 : 0.13) at(x + rng.range(-0.02, 0.02), zz + rng.range(-0.02, 0.02), () => (onions ? CK.onion(sh, rng) : CK.carrotTop(sh, rng)));
+  } else {
+    for (let i = 0; i < 4; i++) at(-0.85 + i * 0.57, 0, () => CK.tomato(sh, rng));
+  }
+}
+
 export function vegBeds(k: Kit, rng: Rng, n: number, d: number): void {
   const sh = k.sh;
   const bd = 1.1,
@@ -640,6 +667,10 @@ export function vegBeds(k: Kit, rng: Rng, n: number, d: number): void {
     sh.box(1.16, 0.16, z, 0.08, 0.32, bd - 0.16, 1);
     k.m('#4a3424', 'stone');
     sh.box(0, 0.14, z, 2.24, 0.28, bd - 0.16, 1);
+    if (shapeOn('shapecrops')) {
+      shapedBed(k, rng, z, bd);
+      continue;
+    }
     const crop = rng.int(0, 3);
     if (crop === 0) {
       // lettuce / cabbage heads

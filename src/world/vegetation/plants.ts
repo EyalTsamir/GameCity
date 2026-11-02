@@ -5,6 +5,8 @@
 import * as THREE from 'three';
 import { closeNatureOn } from '../../core/closenature';
 import { Rng } from '../../core/rng';
+import { shapeOn } from '../../core/sweepshape';
+import * as CK from './cropkit';
 import { GeoSink, Shaper } from './geo';
 import { Wind, col, blob } from './species';
 
@@ -390,14 +392,60 @@ export function flowerBed(s: GeoSink, w: Wind, sh: Shaper, cx: number, cz: numbe
 // ──────────────────────────────────────────────────────────────── crops ──
 
 /** Raised soil row (the bed itself). */
-export function soilRow(sh: Shaper, w: Wind, ax: number, az: number, bx: number, bz: number, y: number, width: number): void {
+export function soilRow(sh: Shaper, w: Wind, ax: number, az: number, bx: number, bz: number, y: number, width: number, rng?: Rng): void {
   w.at(ax, y, az, 0, 0, 0);
   sh.frame(0, 0, 0, 0);
+  if (rng && shapeOn('shapecrops')) {
+    CK.soilRidge(sh, ax, az, bx, bz, y, width, rng);
+    return;
+  }
   sh.color('#5b3e2a');
   sh.beam(ax, y + 0.06, az, bx, y + 0.06, bz, width, 0.14, true);
 }
 
+/** plants, each on its ridge (cropkit.ts) */
+function shapedCrop(w: Wind, sh: Shaper, kind: string, x: number, y: number, z: number, rng: Rng): void {
+  sh.frame(x, y, z, 0);
+  switch (kind) {
+    case 'cabbage':
+      w.at(x, y, z, 0.2, 0.25, 0);
+      CK.cabbage(sh, rng);
+      break;
+    case 'lettuce':
+      w.at(x, y, z, 0.2, 0.4, 0);
+      CK.lettuce(sh, rng);
+      break;
+    case 'carrot':
+      w.at(x, y, z, 0.6, 1.0, 0);
+      CK.carrotTop(sh, rng);
+      break;
+    case 'beans':
+      w.at(x, y, z, 0.25, 0.8, 0);
+      CK.beans(sh, rng);
+      break;
+    case 'corn':
+      w.at(x, y, z, 0.5, 0.9, 0);
+      CK.corn(sh, rng);
+      break;
+    case 'sunflower':
+      w.at(x, y, z, 0.45, 0.6, 0);
+      CK.sunflower(sh, rng);
+      break;
+    case 'pumpkin':
+      w.at(x, y, z, 0.1, 0.3, 0);
+      CK.pumpkin(sh, rng);
+      break;
+    default:
+      w.at(x, y, z, 0.3, 0.6, 0);
+      CK.berryBush(sh, rng);
+  }
+}
+
 export function crop(s: GeoSink, w: Wind, sh: Shaper, kind: string, x: number, y: number, z: number, rng: Rng): void {
+  if (shapeOn('shapecrops')) {
+    shapedCrop(w, sh, kind, x, y, z, rng);
+    return;
+  }
   switch (kind) {
     case 'cabbage': {
       w.at(x, y, z, 0.2, 0.25, 0);

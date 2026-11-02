@@ -11,7 +11,7 @@ import { markProp } from '../lettering/spots';
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import { Kit, spokedWheel } from './furniture';
-import { cbox, lathe } from './shapes';
+import { cbox, lathe, softBlob } from './shapes';
 import { parasol, wheelieBins, CANVAS } from './garden';
 import type { ChairOut } from './service';
 import { GREEN, type GreenKit } from '../buildings/green';
@@ -677,12 +677,14 @@ function packNear(kd: Kit, y: number, w: number, d: number, h: number, col: stri
 }
 
 /** a full sack: a pillow, its corners pulled out, sewn across each end */
-function sackNear(kd: Kit, x: number, y: number, z: number, col: string): void {
+function sackNear(kd: Kit, x: number, y: number, z: number, col: string, seed: number): void {
   const sh = kd.sh;
   kd.m(col, 'rubber');
-  cbox(sh, x, y, z, 0.62, 0.205, 0.92, 0.09, 0);
+  // what fills it presses out against the cloth and sags between the corners; it lies where the sack below let it
+  softBlob(sh, x, y, z, 0.31, 0.108, 0.47, 0.42, 0.62, 0.045, seed, 9, 18);
+  // the sewn ends, folded over
   kd.m('#8c8473', 'rubber');
-  for (const e of [-1, 1]) sh.box(x, y + 0.0635, z + e * 0.395, 0.42, 0.003, 0.006, 1);
+  for (const e of [-1, 1]) sh.box(x, y + 0.06, z + e * 0.4, 0.38, 0.004, 0.007, 1);
 }
 
 /** a carton at (x, y, z), its foot at y: tape down its middle, the flap's edge, a printed square and a label */
@@ -730,7 +732,7 @@ export function palletGoods(k: Kit, rng: Rng, kd?: Kit): void {
       for (let r = 0; r < 3; r++) for (let c = 0; c < 2; c++) {
         const z = rng.range(-0.05, 0.05);
         sh.ellipsoid(-0.28 + c * 0.56, y + 0.24 + r * 0.17, z, 0.3, 0.1, 0.45, 0);
-        if (kd) sackNear(kd, -0.28 + c * 0.56, y + 0.24 + r * 0.17, z, col);
+        if (kd) sackNear(kd, -0.28 + c * 0.56, y + 0.24 + r * 0.17, z, col, l * 7 + r * 3 + c + 1 + z * 40);
       }
     } else if (kind === 2) {
       const col = rng.pick(['#a65d43', '#b8643f', '#c9c3b7']);
@@ -1296,7 +1298,7 @@ export function binRow(k: Kit, rng: Rng): void {
 }
 
 /** 20 ft storage container (corrugated sides suggested by ribs), doors at +X end. */
-export function container(ks: Kit, rng: Rng): void {
+export function container(ks: Kit, rng: Rng, kd?: Kit): void {
   const sh = ks.sh;
   const col = rng.pick(['#2f6fb0', '#c9442c', '#3f8f5a', '#e8a33c', '#8a5aa8', '#2a7a8a', '#b8b0a0', '#7a3b2e']);
   const L = 6.06,
@@ -1319,6 +1321,126 @@ export function container(ks: Kit, rng: Rng): void {
   // door end: lock bars
   ks.m('#2a2c2e', 'steel');
   for (const z of [-0.8, -0.35, 0.35, 0.8]) sh.box(L / 2 + 0.03, H / 2, z, 0.03, H - 0.3, 0.04, 0);
+  if (kd) containerNear(kd, L, W, H, col, 7 + Math.floor(rng.next() * 900));
+}
+
+/**
+ * What a shipping container is made of, for up close (`kd`, same frame as `container`, ?noshapecontainer): the walls are corrugated sheet,
+ * the corners cast fittings with their holes, the doors have four locking bars with handles, hinges and a rubber seal, the sill forklift pockets.
+ */
+function containerNear(kd: Kit, L: number, W: number, H: number, col: string, seed: number): void {
+  const sh = kd.sh;
+  const paint = (k: number): void => {
+    kd.m(col, 'paint');
+    kd.s.r *= k;
+    kd.s.g *= k;
+    kd.s.b *= k;
+  };
+  const rust = (): void => {
+    kd.m('#6b4a35', 'steel');
+  };
+  // a corrugated wall in the plane z = w (facing +z when dir = 1), from x0 to x1, y0 to y1; its valleys clear the far model's ribs
+  const sheet = (x0: number, x1: number, y0: number, y1: number, w: number, dir: number): void => {
+    const pitch = 0.278,
+      deep = 0.036,
+      flat = 0.07;
+    const n = Math.round((x1 - x0) / pitch);
+    const p = (x1 - x0) / n;
+    const q = (p - 2 * flat) / 2;
+    const slope = Math.hypot(deep, q);
+    const quad = (a: number, az: number, b: number, bz: number, nx: number, nz: number): void => {
+      const v0 = sh.v(a, y0, w + az * dir, nx, 0, nz * dir),
+        v1 = sh.v(b, y0, w + bz * dir, nx, 0, nz * dir),
+        v2 = sh.v(b, y1, w + bz * dir, nx, 0, nz * dir),
+        v3 = sh.v(a, y1, w + az * dir, nx, 0, nz * dir);
+      if (dir > 0) {
+        sh.s.tri(v0, v1, v2);
+        sh.s.tri(v0, v2, v3);
+      } else {
+        sh.s.tri(v0, v2, v1);
+        sh.s.tri(v0, v3, v2);
+      }
+    };
+    for (let i = 0; i < n; i++) {
+      const x = x0 + i * p;
+      quad(x, deep, x + flat, deep, 0, 1);
+      quad(x + flat, deep, x + flat + q, 0, deep / slope, q / slope);
+      quad(x + flat + q, 0, x + flat + q + flat, 0, 0, 1);
+      quad(x + flat + q + flat, 0, x + p, deep, -deep / slope, q / slope);
+    }
+  };
+  const rail = 0.12;
+  paint(1);
+  for (const d of [-1, 1]) sheet(-L / 2 + 0.16, L / 2 - 0.16, rail, H - rail, (d * W) / 2 + d * 0.031, d);
+  // the blind end: the same sheet across
+  sh.push().local(-L / 2 - 0.031, 0, 0, 0, -Math.PI / 2);
+  sheet(-W / 2 + 0.16, W / 2 - 0.16, rail, H - rail, 0, 1);
+  sh.pop();
+  // the rails and posts, a shade darker, standing proud of the sheet
+  paint(0.74);
+  for (const d of [-1, 1]) {
+    cbox(sh, 0, H - rail / 2, (d * W) / 2, L + 0.01, rail, 0.16, 0.012, 1);
+    cbox(sh, 0, rail / 2, (d * W) / 2, L + 0.01, rail, 0.16, 0.012, 1);
+    for (const e of [-1, 1]) cbox(sh, (e * (L - 0.16)) / 2, H / 2, (d * (W - 0.16)) / 2 + d * 0.012, 0.17, H, 0.18, 0.012, 3);
+  }
+  for (const e of [-1, 1]) {
+    cbox(sh, (e * L) / 2, H - rail / 2, 0, 0.16, rail, W - 0.1, 0.012, 1);
+    cbox(sh, (e * L) / 2, rail / 2, 0, 0.16, rail, W - 0.1, 0.012, 1);
+  }
+  // the cast corner fittings, with their oval holes
+  paint(0.52);
+  for (const d of [-1, 1])
+    for (const e of [-1, 1])
+      for (const y of [0.06, H - 0.06]) {
+        const cx = (e * (L - 0.15)) / 2,
+          cz = (d * (W - 0.15)) / 2;
+        cbox(sh, cx, y, cz + d * 0.015, 0.178, 0.122, 0.18, 0.008, 0);
+      }
+  kd.m('#141516', 'steel');
+  for (const d of [-1, 1])
+    for (const e of [-1, 1])
+      for (const y of [0.06, H - 0.06]) {
+        sh.box((e * (L - 0.15)) / 2, y, (d * W) / 2 + d * 0.0955, 0.085, 0.05, 0.002, 0);
+        sh.box((e * L) / 2 + e * 0.011, y, (d * (W - 0.15)) / 2 + d * 0.015, 0.002, 0.05, 0.085, 0);
+      }
+  // forklift pockets in the sill
+  kd.m('#141516', 'steel');
+  for (const d of [-1, 1]) for (const x of [-0.92, 0.92]) sh.box(x, 0.07, (d * W) / 2 + d * 0.081, 0.36, 0.09, 0.002, 0);
+  // the door end: two leaves, a rubber seal, hinges on the posts, four locking bars with cams and handles
+  const fx = L / 2 + 0.031;
+  paint(0.92);
+  cbox(sh, fx - 0.012, H / 2, 0.59, 0.024, H - 2 * rail, 1.13, 0.006, 3);
+  cbox(sh, fx - 0.012, H / 2, -0.59, 0.024, H - 2 * rail, 1.13, 0.006, 3);
+  // pressed panels in the leaves
+  paint(0.84);
+  for (const z of [0.59, -0.59]) for (const y of [0.62, 1.3, 1.98]) sh.box(fx + 0.0025, y, z, 0.002, 0.52, 0.92, 0);
+  kd.m('#191a1b', 'rubber');
+  sh.box(fx + 0.002, H / 2, 0, 0.008, H - 2 * rail, 0.03, 0);
+  paint(0.6);
+  for (const z of [-1.07, 1.07]) for (const y of [0.45, 1.0, 1.6, 2.15]) cbox(sh, fx + 0.012, y, z, 0.05, 0.09, 0.14, 0.006, 0);
+  for (const z of [-0.84, -0.3, 0.3, 0.84]) {
+    kd.m('#8f949a', 'steel');
+    sh.push().local(fx + 0.045, 0, z);
+    sh.cyl(0, 0.05, 0, 0.016, 0.016, H - 0.1, 8, 0);
+    // keepers, cams top and bottom
+    paint(0.55);
+    for (const y of [0.1, 0.55, 1.5, 2.1, H - 0.1]) sh.box(-0.015, y, 0, 0.04, 0.03, 0.05, 0);
+    kd.m('#8f949a', 'steel');
+    sh.box(0, 0.075, 0, 0.05, 0.05, 0.05, 0);
+    sh.box(0, H - 0.075, 0, 0.05, 0.05, 0.05, 0);
+    // the handle, folded against the door
+    sh.box(0.024, 1.14, Math.sign(z) * 0.14, 0.022, 0.03, 0.26, 0);
+    sh.pop();
+  }
+  // the data plate; a scuff and rust along the sill
+  kd.m('#d9d4c8', 'plastic');
+  sh.box(fx + 0.002, 2.0, 0.59, 0.003, 0.16, 0.26, 0);
+  rust();
+  for (let i = 0; i < 6; i++) {
+    const x = -L / 2 + 0.6 + ((seed * (i + 3) * 137) % 480) / 100;
+    const w = 0.05 + ((seed * (i + 7)) % 12) / 100;
+    for (const d of [-1, 1]) sh.box(x, 0.13 + ((seed + i) % 3) * 0.004, (d * W) / 2 + d * 0.082, w, 0.012 + (i % 3) * 0.006, 0.002, 0);
+  }
 }
 
 /** Steel pipes stacked on timber bearers. */

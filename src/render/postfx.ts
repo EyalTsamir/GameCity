@@ -25,6 +25,9 @@ import { SunShaftsEffect } from './postfx/sunShafts';
 import { setAtmoCamera } from './atmosphere';
 import { perfOn } from '../core/perfdeep';
 import { flickerFix } from '../core/sweepflicker';
+import { shapeFix } from '../core/sweepshape';
+import { globalUniforms } from '../core/uniforms';
+import { EdgeWearEffect } from './postfx/edgeWear';
 import { TemporalAA } from './postfx/taa';
 import type { AtmosphereService } from './sky/atmoDrive';
 
@@ -188,6 +191,8 @@ export default function create(ctx: CityContext): CityModule {
     } else if (fog && (fog as THREE.Fog).isFog) aoU.uAOFog.value.set(fog.near, fog.far);
     else aoU.uAOFog.value.set(0, 0);
   };
+  // corners that catch the light and wear, seams that hold dirt, near the camera: what makes a box stop reading as one (?noedgewear)
+  const edge = shapeFix(quality.level, 'edgewear') ? new EdgeWearEffect(camera, () => 1 - globalUniforms.uNight.value) : null;
   const tilt = new TiltShiftEffect(camera, cloudU, aoU);
   const bloom = new BloomEffect({ blendFunction: BlendFunction.ADD, mipmapBlur: true, luminanceThreshold: 1.0, luminanceSmoothing: 0.35, intensity: 0.6, radius: 0.7, levels: +(params.get('bloomlv') ?? 6) });
   bloom.luminancePass.resolution.scale = +(params.get('bloomres') ?? 0.5);
@@ -221,8 +226,8 @@ export default function create(ctx: CityContext): CityModule {
   const shafts = world && !params.has('noshafts') ? new SunShaftsEffect() : null;
   // ?fx=smaa,ao,clouds,tilt,shafts,bloom,look (debug: build the chain from a subset). SMAA's blending
   // samples the input buffer itself, so the AO step comes right after it.
-  const fxList = (params.get('fx') ?? (aaMode === 'none' ? 'ao,clouds,tilt,shafts,bloom,look' : 'smaa,ao,clouds,tilt,shafts,bloom,look')).split(',').filter((k) => (k !== 'ao' || !!ao) && (k !== 'shafts' || !!shafts));
-  const all = { smaa, ao: aoFx, clouds, tilt, shafts: shafts as SunShaftsEffect, bloom, look } as const;
+  const fxList = (params.get('fx') ?? (aaMode === 'none' ? 'ao,edge,clouds,tilt,shafts,bloom,look' : 'smaa,ao,edge,clouds,tilt,shafts,bloom,look')).split(',').filter((k) => (k !== 'ao' || !!ao) && (k !== 'shafts' || !!shafts) && (k !== 'edge' || !!edge));
+  const all = { smaa, ao: aoFx, edge: edge as EdgeWearEffect, clouds, tilt, shafts: shafts as SunShaftsEffect, bloom, look } as const;
   const fxPass = new EffectPass(camera, ...(Object.keys(all) as (keyof typeof all)[]).filter((k) => fxList.includes(k)).map((k) => all[k]));
   fxPass.dithering = !taa;
   composer.addPass(fxPass);
@@ -365,6 +370,7 @@ export default function create(ctx: CityContext): CityModule {
 
 
   ctx.services.postfx = {
+    edgeWear: edge,
     setEnabled(effect, on) {
       if (effect === 'all') enabledAll = on;
       else if (effect === 'dof') dofUser = on;

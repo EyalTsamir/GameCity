@@ -1293,7 +1293,7 @@ export default function create(ctx: CityContext): CityModule {
         bz = alongX ? v : b;
       const yv = H((ax + bx) / 2, (az + bz) / 2);
       selP(ax);
-      soilRow(psh, pw, ax, az, bx, bz, yv, 0.62);
+      soilRow(psh, pw, ax, az, bx, bz, yv, 0.62, rng);
       selF(ax);
       const spacing = kind === 'beans' ? 1.1 : kind === 'pumpkin' ? 0.9 : kind === 'corn' || kind === 'sunflower' ? 0.5 : 0.42;
       for (let u = a + spacing / 2; u < b; u += spacing) {
