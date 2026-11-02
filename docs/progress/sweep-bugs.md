@@ -72,7 +72,23 @@ By eye, new against `?nosweepbugs` from the same pose: Seaview poles behind the 
 
 ## Costs
 
-Not measured when the 18:30 limit fell: the rebake behind the shared lock took until 18:20. Measured after it, see the last section.
+All on AC behind `power-guard.mjs`, after `bake.mjs --url` said up to date. Each number is new (`all on`) against `?nosweepbugs`, whole page loads, because most switches are compile-time. Page loads are noisier than the in-page A/B the rule asks for, so this is the best available reading, not a clean pass.
+
+| Run | Street | Market | Overview | Downtown |
+|---|---|---|---|---|
+| Four `abprof.mjs` runs ABBA, each waiting on the lock, 16 min to an hour apart | +0.71 | +0.35 | +0.11 | +0.16 |
+| One lock, one browser, two loads each (`vary.mjs`) | −0.69 | +0.19 | | |
+| One lock, one browser, 6 loads on, 4 off | −0.36 (+0.50 with the first load's 44.35, a cold outlier) | −0.07 | | |
+
+The two later runs put the cost under +0.3 at both views; the first, with loads far apart in time, does not. The two methods disagree by more than the limit, so the limit is not proven. In the one-lock run, `noplumegaps`, `nocroptops`, `nocarglass` and `nostepcourse` each saved nothing at either view. `boardblock` toggled in one page: no difference beyond noise, street −0.11 ±0.42 and +0.14 ±0.45, market −0.73 ±0.82 and −0.24 ±0.57 (the group hidden against shown). Triangles the same within drift, about 4.05 M at street and 4.0 M at market.
+
+Not measured: a clean in-page A/B of the whole round, which needs the switches to work at runtime.
+
+## Final checks
+
+`npm run typecheck` and `npm run build` pass (5.2 MB).
+
+Stopped by the coordinator at 20:50 before any of them ran, the machine being needed: `shot.mjs` overview with invariants and validate, `?diorama`, `?quality=medium`, `?quality=low`, `hitch.mjs`, the full `ui-test.mjs --q noidle`.
 
 ## Left
 
