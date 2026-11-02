@@ -34,6 +34,8 @@ export class TriGrid {
     readonly attrs: SourceAttr[],
     readonly cell: number,
     keep: (geo: THREE.BufferGeometry, a: number, b: number, c: number) => boolean,
+    /** the way the piece runs if the mesh knows better than the shape of its triangle */
+    private readonly grainDir?: (geo: THREE.BufferGeometry, v: number) => readonly [number, number, number] | null,
   ) {
     this.stride = attrs.reduce((s, a) => s + a.size, 0);
     let off = 0;
@@ -230,7 +232,11 @@ export class TriGrid {
       this.read(g, v0, ax, 0);
       this.read(g, v1, ax, S);
       this.read(g, v2, ax, 2 * S);
-      if (this.grainAt >= 0) grainOf(ax, S, this.grainAt);
+      if (this.grainAt >= 0) {
+        const d = this.grainDir?.(g, v0);
+        if (d) for (let k = 0; k < 3; k++) for (let c = 0; c < 3; c++) ax[k * S + this.grainAt + c] = d[c];
+        else grainOf(ax, S, this.grainAt);
+      }
       // Sutherland-Hodgman against the four sides, in a fixed order
       let m = 3;
       m = clip(ax, bx, m, S, 0, x0, 1);

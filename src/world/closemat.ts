@@ -137,6 +137,16 @@ function whatOf(g: THREE.BufferGeometry, v: number): number {
   return 0;
 }
 
+const ALONG_X = [1, 0, 0] as const,
+  ALONG_Z = [0, 0, 1] as const;
+/** (`matplank`) a harbour deck says which way its boards run; the long side of the quad said nothing about that, and the grain lay across the boards */
+function plankGrain(g: THREE.BufferGeometry, v: number): readonly [number, number, number] | null {
+  const pat = g.getAttribute('aPat');
+  if (!pat || Math.abs(g.getAttribute('normal').getY(v)) < 0.7) return null;
+  const id = Math.round(pat.getX(v));
+  return id === HPAT.PLANKS_X ? ALONG_Z : id === HPAT.PLANKS_Z ? ALONG_X : null;
+}
+
 const SOLID_ATTRS: SourceAttr[] = [
   { name: 'position', size: 3 },
   { name: 'normal', size: 3 },
@@ -320,7 +330,7 @@ export default function create(ctx: CityContext): CityModule {
         const dx = Math.abs(P.getX(a) - P.getX(b)) + Math.abs(P.getY(a) - P.getY(b)) + Math.abs(P.getZ(a) - P.getZ(b));
         const dy = Math.abs(P.getX(b) - P.getX(c)) + Math.abs(P.getY(b) - P.getY(c)) + Math.abs(P.getZ(b) - P.getZ(c));
         return dx + dy > 0.12;
-      });
+      }, matFix(ctx.quality.level, 'matplank') ? plankGrain : undefined);
       layer(name, grid, SOLID_ATTRS, (kind ? `#define ${kind}\n` : '') + CM_SOLID, 'CM_SOLID', radius, cell, top);
     };
     solid('cmTrim', (n) => n === 'buildings-trim', 'CM_JOINERY', 12, 30);
