@@ -6,6 +6,7 @@
 // along each side `u` runs left → right as seen from outside.
 
 import * as THREE from 'three';
+import { whiteOn } from '../../core/sweepwhite';
 import type { Lot } from '../../core/plan';
 import type { Rng } from '../../core/rng';
 import { Builder } from './mesh';
@@ -959,15 +960,23 @@ export function lightBox(g: Gen, x0: number, y0: number, z0: number, x1: number,
   l.box(x0, y0, z0, x1, y1, z1, 0b111111);
 }
 
-/** Aviation obstruction light (blinking red) at a local point. */
-export function aviationLight(g: Gen, x: number, y: number, z: number, phase = 0): void {
+/** Aviation obstruction light (blinking red) at a local point; `foot`: the roof height under it, a thin mast carries it up from there. */
+export function aviationLight(g: Gen, x: number, y: number, z: number, phase = 0, foot?: number): void {
+  const mounted = whiteOn('avmast');
+  if (mounted && foot !== undefined && y - foot > 0.05) {
+    const t = g.trim;
+    const c = [t.r, t.g, t.b];
+    setCol(t, '#5a5e60');
+    t.cylinder(x, z, 0.045, foot, y, 5, false, 0.03);
+    t.setRGB(c[0], c[1], c[2]);
+  }
   const l = g.lights;
   setCol(l, '#ff2a1f');
   l.L[0] = LIGHT_MODE.BLINK;
   l.L[1] = phase;
   l.L[2] = 0.75;
   l.L[3] = 7;
-  l.sphere(x, y, z, 0.32, 6, 4);
+  l.sphere(x, y, z, mounted ? 0.2 : 0.32, 6, 4);
 }
 
 export { ROOFPAT };

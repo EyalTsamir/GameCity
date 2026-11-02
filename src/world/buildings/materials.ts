@@ -27,6 +27,7 @@
 
 import { handDoorsLive, handRoofsLive } from '../../core/closehand';
 import * as THREE from 'three';
+import { whiteOn } from '../../core/sweepwhite';
 import { FAR_BAKE_OUT, FAR_FRAG_MAIN, FAR_FRAG_PARS, FAR_VERT_MAIN, FAR_VERT_PARS, NEAR_VERT_MAIN, NEAR_VERT_PARS } from './farFacade';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
@@ -2593,8 +2594,12 @@ const LIGHTS_FRAG_MAIN = /* glsl */ `
     float c = fract(uRealTime * rate + ph);
     float flash = 1.0 - smoothstep(0.0, 0.12, c) * (1.0 - smoothstep(0.85, 1.0, c));
     flash = max(flash, 0.0);
-    on = mix(0.25, 1.0, nightF) * smoothstep(0.0, 1.0, flash) + 0.06 * nightF;
-    dayLook = 0.65;
+${whiteOn('dayaviation')
+  ? `    // an obstruction light works from dusk: by day a dull lens, not a red dot hanging off every roof corner (?nodayaviation)
+    on = nightF * smoothstep(0.0, 1.0, flash) + 0.06 * nightF;
+    dayLook = 0.14;`
+  : `    on = mix(0.25, 1.0, nightF) * smoothstep(0.0, 1.0, flash) + 0.06 * nightF;
+    dayLook = 0.65;`}
   } else if (mode > 1.5 && mode < 2.5) {
     float t = uRealTime * rate + ph * 10.0;
     float k = floor(t);
