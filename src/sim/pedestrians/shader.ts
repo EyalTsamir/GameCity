@@ -434,6 +434,15 @@ void pedPose(inout vec3 p, inout vec3 n) {
   }
   if (bone == ${B.HEAD}) pedSunLift = 0.34;
   ${SHOULDERS}
+  ${sweepPeople('hairledge') ? `
+  // long hair from behind: cap and sheet each had their own normals, so one was lit from the sky and the other not, a bowl sitting on a curtain. One field across both
+  if (region == ${R.HAIR} && bone == ${B.HEAD} && (iC2.z >> 29u) == 3u) {
+    vec3 hc0 = pedPiv(${PIV.HEAD});
+    float hs0 = hc0.y / 1.535;
+    vec3 hb0 = p - vec3(0.0, hc0.y + 0.125 * hs0, -0.02 * hs0);
+    n = normalize(mix(n, normalize(hb0 * vec3(1.0, 0.6, 1.0)), 0.94 * smoothstep(-0.2 * hs0, -0.11 * hs0, hb0.y)));
+  }
+  ` : ''}
   if (region == ${R.TORSO} || region == ${R.LEG}) {
     float hipK = region == ${R.TORSO} ? 1.0 - smoothstep(0.26, 0.42, h) : smoothstep(0.72, 0.88, h);
     if (hipK > 0.0) {
@@ -2073,6 +2082,11 @@ const FRAG_COLOR = /* glsl */ `
 #ifdef PED_CLOSE
       if (vPedFace.y > 2.5) lk.z *= 0.4;
       pc *= mix(1.0, (0.74 + 0.26 * lk.x) * (0.9 + 0.2 * lk.y), lk.z);
+      ${sweepPeople('hairledge') ? `
+      // (the same tone as the cap it hangs from: darker by the locks' shadows and without the cap's lift, a bowl sat on a black curtain)
+      pc *= 1.0 + 0.16 * lk.z;
+      pc += vec3(0.012, 0.012, 0.014) * (1.0 - smoothstep(0.02, 0.12, dot(pc, vec3(0.33))));
+      ` : ''}
 #else
       pc *= mix(1.0, (0.55 + 0.45 * lk.x) * (0.85 + 0.3 * lk.y), lk.z);
 #endif
@@ -2311,6 +2325,10 @@ const HAIR_NORMAL = /* glsl */ `
     vec3 hT = sign(hdet) * (dFdx(hf.y) * hr1 + dFdy(hf.y) * hr2);
 #ifdef PED_CLOSE
     if (vPedFace.z > 4.5) hT = viewMatrix[1].xyz;
+    ${sweepPeople('hairledge') ? `
+    // (down the back of a long cut's cap the sheen goes over to the sheet's: it was bright down to the edge, the sheet dark from it)
+    else if (vPedFC.x == 3u) hT = mix(hT, viewMatrix[1].xyz * max(length(hT), 1e-9), smoothstep(0.955, 0.915, vPedRest.y / vPedHgt));
+    ` : ''}
 #endif
     hT -= normal * dot(hT, normal);
     pedHairT = dot(hT, hT) > 1e-20 ? normalize(hT) : vec3(0.0);
