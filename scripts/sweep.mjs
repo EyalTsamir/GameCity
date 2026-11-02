@@ -118,7 +118,19 @@ for (const h of [...HOURS, ...specialHours]) {
     }
   }
 }
-const isDone = (j) => fs.existsSync(path.join(outDir, j.file));
+// The most valuable first, so that stopping early leaves it done: kinds at noon, walkable cells at noon, kinds at night,
+// walkable cells at night, then the kinds' own hours and the rest of the cells.
+const rankOf = (j) => {
+  const walk = j.part === 'squares' && (j.cell.type === 'walk' || j.cell.type === 'walk-edge');
+  if (j.h === HOURS[0]) return j.part === 'objects' ? 0 : walk ? 1 : 5;
+  if (j.h === HOURS[1]) return j.part === 'objects' ? 2 : walk ? 3 : 6;
+  return 4;
+};
+jobs.sort((a, b) => rankOf(a) - rankOf(b));
+// A kind not found at an hour isn't searched for again in the next chunk.
+const absentFile = path.join(outDir, 'absent.json');
+const absentAtStart = new Set(fs.existsSync(absentFile) ? JSON.parse(fs.readFileSync(absentFile, 'utf8')) : []);
+const isDone = (j) => fs.existsSync(path.join(outDir, j.file)) || (j.part === 'objects' && absentAtStart.has(`${j.kind.id}@${j.h}`));
 const todo = jobs.filter((j) => !isDone(j));
 if (args.dry) {
   const n = (p) => jobs.filter((j) => j.part === p).length;
@@ -440,6 +452,7 @@ const shoot = async (page, job, near) => {
       if (!picked && kind.x === undefined) {
         status.notFound[once] = kind.find.when ?? 'nothing found';
         near.absent.add(once);
+        fs.writeFileSync(absentFile, JSON.stringify([...near.absent]));
         return null;
       }
       if (picked) {
@@ -537,7 +550,7 @@ let queue = todo.slice();
 let failStreak = 0;
 let shotMs = 0;
 let kbTotal = 0;
-const near = { last: null, kind: null, primed: new Set(), absent: new Set() };
+const near = { last: null, kind: null, primed: new Set(), absent: new Set(absentAtStart) };
 try {
   while (queue.length && !status.stop) {
     let browser = null;
