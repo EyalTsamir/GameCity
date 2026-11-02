@@ -462,7 +462,8 @@ export function genMarketStall(env: Env, f: Feature): void {
       const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
       const uv: [number, number][] = [[a[0], a[2]], [b[0], b[2]], [c[0], c[2]], [d[0], d[2]]];
       CK.poly(canopy, [a, b, c, d], uv);
-      CK.poly(under, [d, c, b, a], uv);
+      // (the kinetic kit is double-sided: on the same vertices, with the other diagonal, the lining fought the cloth in patches the wind moved)
+      CK.poly(under, [d, c, b, a].map((q) => (stallWind ? [q[0], q[1] - 0.02, q[2]] : q)) as [number, number, number][], uv);
     }
   // scalloped valance along the front edge
   for (let i = 0; i < 10; i++) {

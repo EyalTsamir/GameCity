@@ -126,14 +126,19 @@ Rest is within budget at all four. Moving: overview +0.4, over the +0.2 budget b
 - **Wind fade on far trees, rows, props sway, wall green** (`ab85f17`). It adds little on top of the two above. Real but small.
 - `?taad=.34` (depth-rejected pixels keeping some count): nudge d2 98.25 → 93.65, area8 unchanged at 13.13, area24 2.10 → 1.96. Not enough to carry, removed.
 
-Hour 12, mean of 5 views (overview, downtown, market, tree and lawn at 3 m), wind with a still camera (`a6`, `a7`), and this is the gain over SMAA asked for:
+Hour 12, mean of 5 views (overview, downtown, market, tree and lawn at 3 m), wind with a still camera, one run with the canopy fix below (`a8`), and this is the gain over SMAA asked for:
 | | d2 | area3 % | area8 % | area24 % | sharp |
 |---|---|---|---|---|---|
-| SMAA | 125.42 | 20.77 | 14.73 | 7.14 | 3.87 |
-| now (`a7`) | 33.88 | 10.82 | 6.17 | 1.70 | 4.49 |
+| SMAA | 121.81 | 19.94 | 14.01 | 6.80 | 3.86 |
+| now | 36.65 | 11.53 | 6.24 | 1.90 | 4.30 |
+Don't use `a7`'s wind numbers: bare `market` isn't a POI, so that row isn't the market.
 Nudge, mean of downtown, street, market (`a7n`): SMAA 290 / 33.9 / 18.9 → **98.25 / 13.13 / 2.10** (d2, area8, area24). Target was 94 / 9.6 / 1.3: d2 about back, area8 and area24 not. Downtown carries it (area8 22.66). Still (`a6n`), noon d2 .01 / 3.62 / 1.76, 21.5 1.14 / 2.0 / 1.24, area8 ≤ .28.
 
 Frames read: `city6` bus at noon and 21.5 still and nudged, walker; `city7` carousel, ferris wheel, turbine, kite, market, bus and walker at 21.5 still. Solid, no ghosts, lettering clean. **Not read: a train** (`taa_12_train_still` found no train in time, the script says MISSING) **and fireworks** (the camera landed inside something: both TAA and SMAA frames are black, a badly aimed test, not a result). Nudged `d34` frames not read since the variant was dropped. Boats read fine at nudge earlier; cranes solid at calm .2, not reread at .12.
+
+## Fix 5: market canopies fought their own lining (`src/world/landmarks/civic.ts`)
+Every striped stall read as a patchwork of colour and grey, and the patches moved with the wind. Not TAA: the old SMAA frames have it too. The cloth and its cream lining sat on the same vertices with opposite winding and the other diagonal. That was fine while culled, but moving the cloth to the kinetic kit for the wind made both double-sided (`landmarks/materials.ts:117`), so they z-fought, and the lining, lit from below, showed through as grey. The lining now hangs 2 cm under the cloth (`?nostallwind` stays as it was).
+Frames (`city8`, market from above and a stall from the side at 12): clean stripes on every stall, no slit visible at the edges at that range. Not looked at from under a stall at 1 m. Market in wind, hour 12, TAA: d2 52.39 → 40.11, area8 7.38 → 5.48, area24 4.08 → 3.01 (`a6` new12 → `a8`; separate runs, wind differs a little, and SMAA moved 101.5 → 88.6 on the same fix). Heat map: canopies are thin outlines now. Bunting and wires lead, and they are real motion.
 
 ## Fix 2: wind that can't be seen as motion fades out (`?nowindfade`, all tiers)
 A back-and-forth under about a pixel can't be read as motion, only as shimmer. Plants (`vegetation/foliage.ts`, `thMotionKeep`): the oscillating part of the main sway, branch bob and leaf flutter fade once their amplitude falls from 1.2 to 0.35 px at that distance, so flutter is whole within about 23 m and gone by 80 m, bob 47 and 160 m. The mean lean stays, and it uses `uNearEye` / `uNearLens`, so shadows match and zooming in brings it back. Grass (`groundcover/field.ts`): the same fade on `osc` using the pixel size it already knows; neighbours now sway as a wave (phase `rb.x * 1.2`, was `* 6.28`); calm air is calmer (floor 0.12, was 0.3).
