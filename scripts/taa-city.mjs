@@ -51,7 +51,7 @@ const aim = async ([subject, D, lead]) => {
     }
     if (subject === 'train') {
       const rz = c.plan.rail.z;
-      return c.services.rail.sim.trains.filter((t) => t.v > 2).map((t) => ({
+      return c.services.rail.sim.trains.filter((t) => t.v > 2 && Math.abs(t.cars[0].x) < 170).map((t) => ({
         get x() {
           return t.cars[0].x;
         },
