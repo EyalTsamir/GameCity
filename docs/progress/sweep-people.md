@@ -23,7 +23,11 @@ Goal from the user: someone walking the city says "wow, the AI thought of everyt
 | Long tops over thighs | `jackethem` | The pelvis goes in behind the thighs at this level, so a jacket hanging below them was cut off in a torn edge over each leg. The thigh now wears the jacket to the hem's height (`vPedTop`, FS paint, no vertices): one hem line, and it swings with the leg |
 | Lapels, collar, tie, hood | `lapels` | On the torso's true surface (`buildCloseLapels`: same Catmull-Rom and yoke as `buildTorso`): lapels with a roll, a notch and a shadow under the edge, on a narrower opening; shirt collar with its foot in the yoke and two points; a tie from a knot that goes in under the jacket; a hood lying on the shoulders instead of a ball |
 | Hip line | `hipline` | Up in the hip a thigh's normal stays with the pelvis (`pedHipKeep`): swung with the thigh it drew a wandering line across the trousers |
+| Neck foot | `neckfoot` | One normal field from neck into yoke: a paler ring round the foot of every neck is gone |
+| Vests | `vestarm` | A hi-vis vest has an armhole, cut in paint (`vPedTop`, w < -1.5): its colour against the sleeve's made a torn edge at the shoulder |
 | Riders | `riderlegs` | A skirt stays off the saddle: those riders get trousers (bare legs to the hip under a dress's top read as a leotard) |
+
+**Near level, on purpose.** Everything above is the close level except: near hair sheen halved (`hairdepth`), near hairline blend narrower and darker (`softline`: it was a grey band round dark hair), near straps bend once over the chest (`straps`: a straight stick came out as dashes). Near keeps its old wide jacket opening and flap lapels, so a suit changes a little at the handover (7 to 15 m).
 
 **Lessons.** A bright band or dot row at a boundary is nearly always a step in a height seen through 2×2 derivatives; take the step out rather than the detail. Two surfaces meeting need the same normal *after* posing, not only at rest. Before adding geometry check whether paint on the mesh that's already there does it (`jackethem` costs one flat varying).
 

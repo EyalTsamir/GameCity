@@ -2396,10 +2396,6 @@ function shoulderTop(d: Dims, x: number): P3 {
 
 /** close level: a strap that hugs the torso (each point pushed out to the torso surface + off) */
 function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: number, ctrl?: P3): void {
-  if (!cfg.close) {
-    stick(b, p0, p1, wdt);
-    return;
-  }
   const T = d.torso;
   const out = (p: P3): P3 => {
     if (p[1] <= T[0].y || p[1] >= T[T.length - 1].y) return p;
@@ -2419,6 +2415,15 @@ function strapPath(b: MeshBuilder, d: Dims, cfg: LodCfg, p0: P3, p1: P3, wdt: nu
     const k = rs / rp;
     return [p[0] * k, p[1], r.cz + (p[2] - r.cz) * k];
   };
+  if (!cfg.close) {
+    // (near level: a straight stick went in under the curve of the chest and came out again as a few dashes; one bend over it)
+    if (cfg.details && sweepPeople('straps')) {
+      const mid = out(lerp3(p0, p1, 0.5));
+      stick(b, p0, mid, wdt);
+      stick(b, mid, p1, wdt);
+    } else stick(b, p0, p1, wdt);
+    return;
+  }
   // a flat webbing ribbon (outer face + edges) along the surface
   const N = 8;
   const pts: P3[] = [];

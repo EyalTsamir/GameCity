@@ -2233,8 +2233,14 @@ const FRAG_COLOR = /* glsl */ `
         pc = mix(pc, vPedSkin * 0.62 * (0.75 + 0.25 * vPedHairW.r), (1.0 - smoothstep(0.0004, 0.0009 + pW, abs(vPedRest.x - pX + wob))) * smoothstep(-0.02, -0.008, vPedRest.z) * 0.6);
       }
 #else
+      // (a blend to skin that wide is a grey band round dark hair)
+      ${SOFTLINE ? `
+      float cov = smoothstep(0.0, 0.07, e);
+      vec3 skinSide = mix(vPedSkin * 0.6, pc, 0.25);
+      ` : `
       float cov = smoothstep(0.0, 0.17, e);
       vec3 skinSide = mix(vPedSkin, vPedSkin * 0.8 + pc * 0.12, 0.6);
+      `}
 #endif
       pc = mix(skinSide, pc, cov);
     }
@@ -2467,7 +2473,8 @@ void RE_Direct_Lambert( const in IncidentLight directLight, const in vec3 geomet
 #ifdef PED_CLOSE
     reflectedLight.directDiffuse += directLight.color * vis * ( 0.016 * s1 + 0.034 * s2 * hc );
 #else
-    reflectedLight.directDiffuse += directLight.color * vis * ( 0.035 * s1 + 0.05 * s2 * hc );
+    // (at this distance the lobes are wider than the strands they come from: dark hair wore a silver band)
+    reflectedLight.directDiffuse += directLight.color * vis * ( ${sweepPeople('hairdepth') ? '0.016 * s1 + 0.03 * s2 * hc' : '0.035 * s1 + 0.05 * s2 * hc'} );
 #endif
   } else if ( vPedMat.y > 0.0 ) {
     float nh = saturate( dot( geometryNormal, normalize( directLight.direction + geometryViewDir ) ) );
