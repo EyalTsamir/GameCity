@@ -82,4 +82,4 @@ Not measured when the 18:30 limit fell: the rebake behind the shared lock took u
 - Bus stop clamps' stone texture: a material, not this list.
 - `bikeLite`, the simplified bikes: not checked.
 - Severity 3 lines not worked through.
-- `plumegaps` at exponent −0.7 not seen against a plume in the last look: the pose showed no plume. The stronger −0.5 was seen and judged too dark.
+- `plumegaps`: at exponent −0.7 the puffs over the street are wider and much fainter than before (`nosweepbugs`), but still read as separate soft patches, not one plume.
