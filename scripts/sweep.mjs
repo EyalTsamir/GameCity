@@ -248,7 +248,8 @@ const placeCell = ([cell, view]) => {
     window.__city.view(pose);
     return { x: cell.x, y: +eye.toFixed(2), z: cell.z, yaw, pitch };
   }
-  const yaw = { N: 0, E: -90, S: 180, W: 90 }[view];
+  // (8° off the axis: a wall seen exactly square-on turns flat white, docs/progress/city-sweep.md, and the streets run along the axes)
+  const yaw = { N: 0, E: -90, S: 180, W: 90 }[view] + 8;
   const D = 8; // the pivot ahead sets the focus and the eye-level lens
   const y = (yaw * Math.PI) / 180;
   window.__city.view({ target: { x: cell.x - Math.sin(y) * D, y: eye, z: cell.z - Math.cos(y) * D }, distance: D, yaw, pitch: 0 });
@@ -262,7 +263,9 @@ const placeObject = ([kind, d, picked, over]) => {
     s = c.__sweep;
   const x = picked?.x ?? kind.x,
     z = picked?.z ?? kind.z;
-  const baseYaw = picked?.yaw !== undefined ? (picked.yaw * 180) / Math.PI + 25 : (kind.yaw ?? 30);
+  let baseYaw = picked?.yaw !== undefined ? (picked.yaw * 180) / Math.PI + 25 : (kind.yaw ?? 30);
+  const offAxis = ((baseYaw % 90) + 90) % 90;
+  if (offAxis < 3 || offAxis > 87) baseYaw += 8; // not square-on, as in placeCell
   const r = kind.r ?? 0;
   const dist = d + r;
   const blocked = (yawDeg) => {

@@ -1,0 +1,56 @@
+{
+  "_intro": "## Read this first (checked by eye, 2026-11-02, about 2,500 noon images, kinds only: no walkable cells yet)\n\n**The square-on fault distorts the ranking below.** Until the capture changed on 2026-11-02, pictures faced walls exactly square (344 kinds, and all cells look along axis-aligned streets). Within a few degrees of square-on, walls and panes lose their colour and interior. The same shop at 8° off is peach and lilac with a full interior, instead of pale with milky glass (`shots/sweep/objects/bld-townhouse-oldtown-flat-shop/12_10m.jpg` against `shots/sweep-check/off8/objects/bld-townhouse-oldtown-flat-shop/12_10m.jpg`). So glass, wall, lighting and blank-panel scores are all inflated for kinds shot so far. From now on the capture stands 8° off. Those kinds get shot and judged again after the fault is fixed.\n\n**Ready for a fix session, in this order:**\n1. `wall-material-differs-by-distance`: the square-on fault. A real bug, reproduced, and it matters most because it also hides other flaws. A walker sees a wall flash when looking straight at it.\n2. `sky-specks-dots`: white specks at noon in the sky and in front of facades. Seen in most of the pictures I opened. Known item, probably cheap.\n3. `decals-cracks-stains-pasted`: black squiggle cracks on plaster at 3 m, and the same squiggles on harbour rock.\n4. `people-mannequin-stiff-blank`: close up, hair strips and hat brims turn into huge spikes, and faces are crude. Large job.\n5. `props-lowpoly-blobs`: real but too broad for one session. Start with the worst seen: ice-cream scoops and vendor, surfboards as plain boxes, faceted barrels.\n\n**Hold until the fault is fixed and these are judged again:** `glass-flat-no-depth` (its reflection over interior part is real: cars and see-through people inside rooms, `objects/bldback-office/12_1m`), `lighting-inconsistent-noon`, `blank-panels-missing-texture`.\n\n**Hold until walkable cells are judged:** ground, foliage, roofs, fittings, architectural details, contact shadows. These look real in places, but the judges score harshly: a plain bench at 1 m got a 5, and street views like `objects/cs-text-column/12_10m` look good to me.\n\n**Not the city:** `camera-misses-subject` and `camera-clips-into-geometry` are mostly the capture tool framing badly.\n",
+  "wall-material-differs-by-distance": {
+    "title": "Walls and panes lose their colour and interior when seen within a few degrees of square-on",
+    "checked": "READY. Real, reproduced at 0° and 1° off, gone at 8°, at 1–10 m, in hard-edged rectangles that shift with the angle. Also with the running city and a fresh load. Stays with nonear, noclosemat, noclosewin, nofacbake, nowallrelief, nomassing. nowinreveal was captured but its picture was not opened. Close-materials then tints the white, which is probably the cyan mortar",
+    "owner": "buildings wall shader, src/world/buildings/materials.ts (cause not found). Cost unknown; likely small once found"
+  },
+  "sky-specks-dots": {
+    "checked": "READY. Real: white dots at noon in the sky and in front of facades and glass, so not only stars",
+    "owner": "not traced; sky or particles. Known item. Probably small"
+  },
+  "decals-cracks-stains-pasted": {
+    "checked": "READY. Real: black squiggle cracks on plaster at 3 m (kiosk, apartment) and on harbour rock (harbor-fishquay-netheap at 1 m)",
+    "owner": "wear patterns: src/world/buildings/materials.ts, closemat crack tile. Rock not traced. Medium"
+  },
+  "people-mannequin-stiff-blank": {
+    "checked": "READY. Real at 1–3 m: hair strips and hat brims become huge spikes, faces crude, a see-through dither near the lens. The capture exaggerates it by standing in the crowd",
+    "owner": "pedestrian models. Large"
+  },
+  "props-lowpoly-blobs": {
+    "checked": "READY, but split it. Real: ice-cream scoops and vendor, surfboards as boxes, faceted barrels. The judges overrate some: a plain bench at 1 m got a 5",
+    "owner": "props and vendor kits. Large overall; do it kit by kit"
+  },
+  "glass-flat-no-depth": {
+    "checked": "HOLD. Milky panes at 10 m were largely the square-on fault. Reflection over interior is real: cars and see-through people inside rooms (bldback-office at 1 m)",
+    "owner": "window and room shaders. Judge again after the fault is fixed"
+  },
+  "lighting-inconsistent-noon": {
+    "checked": "HOLD. Partly the square-on fault. Sunlit views look right, but shaded walls do read dim and bluish at noon (bldback-townhouse at 3 m). Not exposure: the meter only changes it by up to 30 %",
+    "owner": "sky ambient level. Judge again after the fault is fixed"
+  },
+  "blank-panels-missing-texture": {
+    "checked": "HOLD. Not opened one by one; likely inflated by the square-on fault",
+    "owner": "Judge again after the fault is fixed"
+  },
+  "ground-surfaces-flat": {
+    "checked": "HOLD. Gravel at 1 m is real: it reads as pebbled carpet. Many other lines are weak",
+    "owner": "closemat loose ground. Wait for walkable cells"
+  },
+  "foliage-flat-cards": {
+    "checked": "HOLD. Real on the back-garden bank (bldback-house at 10 m): flat leaf clumps on near-black ground. Lawn at 10 m is acceptable",
+    "owner": "vegetation. Wait for walkable cells"
+  },
+  "roofs-walls-bare-uniform": {
+    "checked": "HOLD. One picture: the flat roof terrace is a plain tan slab, tiles look blotchy",
+    "owner": "roofs. Wait for walkable cells"
+  },
+  "camera-misses-subject": {
+    "checked": "NOT THE CITY, mostly. Sampled lines: the capture misses the subject, or a wall blocks the view",
+    "owner": "capture tool, scripts/sweep.mjs"
+  },
+  "camera-clips-into-geometry": {
+    "checked": "NOT THE CITY, mostly. Sampled lines: the camera is against a wall or a passer-by's head. A few misfiled lines may be real (feat-footbridge)",
+    "owner": "capture tool, scripts/sweep.mjs"
+  }
+}
