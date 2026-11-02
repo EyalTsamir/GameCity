@@ -27,6 +27,7 @@ const PROPP = sweepPeople('propprint');
 const GRAIN0 = sweepPeople('seamdots') ? '0.07' : '0.25';
 const GRAIN1 = sweepPeople('seamdots') ? '0.18' : '0.6';
 const CLOTHES = sweepPeople('clothes');
+const JKHEM = sweepPeople('jackethem');
 const DARKLIFT = sweepPeople('clothes') ? '0.6' : '1.0';
 const HC = sweepPeople('hatcloth') ? 'true' : 'false';
 const VS_BRIM = sweepPeople('hatform') ? "{\n        // no hat brim is a flat disc: straw and cotton wander (every hat its own way), a fedora snaps down in front and rolls up at the sides, a hard hat's peak is at the front only\n        float wv = sin(phi * 2.0 + float(h3 & 63u) * 0.1) + 0.6 * sin(phi * 3.0 + float((h3 >> 6u) & 63u) * 0.1);\n        if (st == 3u || st == 7u) p.y += s * s * 0.007 * wv;\n        else if (st == 4u) p.y += s * s * (0.016 * sin(phi) * sin(phi) - 0.012 * cos(phi) + 0.004 * wv);\n        else if (st == 5u) p.xz -= rad * s * hb.x * 0.72 * (1.0 - smoothstep(0.1, 1.0, cos(phi)));\n      }" : '';
@@ -197,6 +198,7 @@ float pedSunLift = 0.12;
 flat varying vec3 vPedGaze;
 flat varying float vPedBrim;
 flat varying float vPedHatSt;
+flat varying vec4 vPedTop; // a top that ends below where the thighs come out of the pelvis: its colour, and on a leg the height of its hem (else < 0)
 flat varying uvec2 vPedFC; // the person's cut (x) and a hashed word for the paint (y) (no attribute free for it: the limit is 16 and instancing takes them)
 float pedDn;
 vec2 pedDg;
@@ -1007,6 +1009,19 @@ void pedPose(inout vec3 p, inout vec3 n) {
     // (the strip from the forearm's last ring to the hand: s must not cross the hem on the way, it drew the sleeve's cloth as a bracelet)
     s = -1.0;
   }
+//@if CL
+  vPedTop = vec4(0.0, 0.0, 0.0, -1.0);
+  ${JKHEM ? `
+  if (region == ${R.LEG} && (iC2.z & ${1 << FB.TAIL}u) == 0u) {
+    float bdT = jacket ? jacketHem : pedP8(iC0.y) * 1.275 - 0.1;
+    if (bdT >= 0.0 && bdT < 0.24) {
+      // (the same rings as the torso's hem coordinate, in the hip joint's height)
+      float hf = bdT < 0.07 ? 0.912 + 0.257 * bdT : bdT < 0.15 ? 0.93 + 0.675 * (bdT - 0.07) : 0.984 + 0.711 * (bdT - 0.15);
+      vPedTop = vec4((jacket ? outer : top) * (0.96 + 0.08 * fract(sin(dot(iRoot.xz, vec2(12.9898, 78.233))) * 43758.5453)), hf * pedPiv(${PIV.HIP}).y);
+    }
+  }
+  ` : ''}
+//@endif
   // painted miniature: per-figure garment jitter (±4 %), lighter up-facing / darker undersides and
   // lower legs (drybrush value ramp), faces and hands a touch warmer and lighter than the arms
   float jit = fract(sin(dot(iRoot.xz, vec2(12.9898, 78.233))) * 43758.5453);
@@ -1076,6 +1091,7 @@ flat varying uvec2 vPedFC;
 flat varying vec3 vPedGaze;
 flat varying float vPedBrim;
 flat varying float vPedHatSt;
+flat varying vec4 vPedTop;
 float pedN2(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
@@ -1984,6 +2000,13 @@ const FRAG_COLOR = /* glsl */ `
   {
     float fw = max(fwidth(vPedS), 1e-4);
     vec3 pc = mix(vPedB, vPedA, clamp(vPedS / fw + 0.5, 0.0, 1.0));
+#ifdef PED_CLOSE
+    // at this level the pelvis goes in behind the thighs, so a jacket that hangs below them was cut off where they came through, in a torn edge
+    // over each leg. The thigh wears the jacket to the hem's height: the same line runs on over it, and swings with it
+    float pedTopS = vPedTop.w > 0.0 ? (vPedRest.y - vPedTop.w) * 1.5 : -1.0;
+    float pedTopK = vPedTop.w > 0.0 ? clamp(pedTopS / max(fwidth(pedTopS), 1e-5) + 0.5, 0.0, 1.0) : 0.0;
+    pc = mix(pc, vPedTop.rgb, pedTopK);
+#endif
 #ifndef PED_FAR
     ${detailPeople('clothprints') ? 'pc = pedPrint(pc, clamp(vPedS / fw + 0.5, 0.0, 1.0));' : ''}
 #endif
@@ -2175,7 +2198,12 @@ const FRAG_COLOR = /* glsl */ `
 #ifdef PED_CLOSE
       vec3 pc0 = pc;
 #endif
+#ifdef PED_CLOSE
+      bool pedTopZ = pedTopS > -0.06;
+      pc = pedFabric(pc, pedTopZ ? ${R.TORSO}.0 : vPedReg, pedTopZ ? 0.12 + pedTopS : vPedH, pedTopZ ? pedTopS : vPedS);
+#else
       pc = pedFabric(pc, vPedReg, vPedH, vPedS);
+#endif
 #ifdef PED_CLOSE
       if (abs(vPedReg - ${R.TORSO}.0) < 0.5 && vPedH > 0.94) pc = pedNeckline(pc);
       // bare limbs are lit as the hand they run into is (the region is flat: at the wrist the two lights alternated triangle by triangle, in flames)
@@ -2199,10 +2227,16 @@ const FRAG_COLOR = /* glsl */ `
       }
       // where pelvis and thighs cut each other they are plain cloth with one normal field: no line shows
       float hipZ = abs(vPedReg - ${R.TORSO}.0) < 0.5 ? (vPedS < 0.0 ? 1.0 - smoothstep(0.14, 0.2, vPedH) : 0.0) : abs(vPedReg - ${R.LEG}.0) < 0.5 ? smoothstep(0.78, 0.85, vPedH) : 0.0;
+      ${JKHEM ? 'hipZ *= 1.0 - pedTopK;' : ''}
       if (hipZ > 0.0) {
         pc = mix(pc, pc0, hipZ);
         pedFabH *= 1.0 - hipZ;
         pedFabK *= 1.0 - hipZ;
+        ${JKHEM ? `
+        // (the shadow under a hem belongs on the plain cloth as well)
+        float hmJ = (pedTopZ ? pedTopS : vPedS) * vPedHgt * 0.4;
+        if (hmJ < 0.0 && (pedTopZ || abs(vPedReg - ${R.TORSO}.0) < 0.5)) pc *= 1.0 - hipZ * 0.42 * exp(hmJ / 0.01);
+        ` : ''}
       }
 #endif
     }
