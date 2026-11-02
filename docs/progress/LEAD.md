@@ -3,6 +3,31 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Close-up second round merged (2026-11-02) — see sweep-flicker.md, close-hand.md, close-windows.md, close-nature.md, close-vehicles.md, close-life.md
+
+Merged at 47b1e0e, windows' log at 703f8d1. Each stage 3 session finished its Left list as far as the queue allowed, and the trembling got its first fixes, because the user asked for it above stage 4: "almost nowhere in the city is there nothing trembling".
+
+**Trembling (`docs/progress/sweep-flicker.md`, `scripts/flicker.mjs`).** Temporal AA replaces SMAA on medium and high (`?notaa`) with a still rest; wind that can't be read as motion fades with distance (`?nowindfade`). Moving-camera shimmer area down by about two thirds, with a still camera in wind about a quarter in town. Reduced, not gone. Not yet faded: far trees, props sway, wall green, rows; half-res AO on leaves; bright zig-zag patches in the wind heat maps, unidentified. **Nobody has watched it at real speed.**
+
+Checks on the production build (5198), behind the power guard: typecheck, build 5.13 MB + bake 18 MB, overview twice invariants `{}` validate `[]`, medium, low, diorama, night clean, console empty. Hitch: no window with a mid-run program. Film-hitch 0 programs, one 150 ms frame, 26 over 50 ms. ui-test 73/74, the miss was `film: the wheel hands the camera back` with maxStep 4.35; rerun twice per build with `--steps film`, passes 10/10 on old and new, so noise. The GL warning from b249a97 is gone (a blank shadow map, `src/core/shadowBlank.ts`).
+
+Cost, b249a97 → merged, same session, 2 + 2, ms:
+| view | 12 | 18.2 | 21.5 |
+|---|---|---|---|
+| overview | 33.5 → 34.5 | 32.9 → 33.0 | 34.7 → 35.1 |
+| downtown | 32.2 → 32.3 | 31.0 → 31.1 | 33.7 → 33.5 |
+| street | 38.3 → 40.6 | 38.2 → 39.1 | 37.2 → 38.5 |
+| market | 38.6 → 38.9 | 35.4 → 36.4 | 39.3 → 40.2 |
+Mean +0.67. Street at noon is about 25 fps, under the 27–28 the user accepted. Switches, GPU ms saved when off, one run, noisy: `noclosewin` street 2.23 / 1.66, market 1.44 / 0.32; the rest mostly under 1, near noise except `noclosenature` street noon 1.75 and `noclosevehicles` 1.46 (one run, triangle counts differ by 750 k between runs, so don't trust those two alone). TAA against SMAA: GPU 0.7 cheaper on average, frame time unchanged. `?taamove` costs 0.6 GPU. Wind fade about 0.
+
+By eye at 3 m, noon and 21.5: rooms read as rooms and the flower shop is a real step. `wall-warehouse` noon: dark door panels with red-brown blotches, looks wrong. Oldtown door lamp still washes the wall cream at night: belongs to the street lamps, not windows.
+
+**Left:**
+- Rooms cost at street and from 4 m (+5.42 ms at night from a shop, windows' own table): cause not found. Sent back to close-windows.
+- Nature: fork shoulder smaller but not gone, near-black crown not cured. Hand: sacks faceted. Vehicles: window cost unresolved, door cost was a likely sign error, perf at the merge only. Life: some of the list not judged by eye.
+- Stamp bug of mine fixed at 426145c: `__BUILD_ID__` undefined when the harness swaps out Vite's client stopped the ui module from loading.
+- Old open items below stay open.
+
 ## Close-up stage 3 merged, not yet measured (2026-11-01) — see close-hand.md, close-windows.md, close-nature.md, close-vehicles.md, close-life.md
 Merged at 43c9e5d: things at hand height (`?nohand`), a generated room behind every window within 34 m (`?noclosewin`), trunks, plants and ground at ankle height (`?noclosenature`), road vehicles and trains up close (`?noclosevehicles`), birds, cats, dogs, gestures and street moments (`?nosmalllife`). Conflicts only in the module list of `src/main.ts`, all kept. Typecheck passes.
 Checks on the merge (a940ce6), behind `scripts/power-guard.mjs`: typecheck + build OK (5.1 MB + bake); overview at speed 4, twice, invariants `{}`, validate `[]`, console clean, no pedestrian overlap; medium, low, diorama clean; ui-test 74/74, `kinds` included; hitch 0 mid-run programs, one 117 ms frame at boot, one 150 ms frame arriving at 21.5; walkhitch 41.5 ms mean, p99 66.7 ms, 0 freezes, 31 MB/s allocated; film-hitch ran, result not read.
