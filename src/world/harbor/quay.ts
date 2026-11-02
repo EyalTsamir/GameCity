@@ -6,6 +6,7 @@
 // tyre fenders on the wall at the berth, oil / wet / fish-water stains on the concrete.
 // Everything static, merged into the harbor-north mesh. ?noquaylife removes it; quality low drops the small things.
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import { HB, PAT, type V3 } from './geo';
 import type { Rng } from '../../core/rng';
@@ -625,16 +626,102 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
     b.box(cx, cy + 0.06, cz, 2.5, 0.12, 3.06, 0, 0);
     b.box(cx, cy + 2.62, cz, 2.5, 0.08, 3.06, 0, 0);
     // doors on the quay side (+x) with locking bars, reefer unit on the south end
+    const shapedReefer = shapeOn('shapereefer');
     b.color('#d9dcd8');
-    b.box(cx + 1.23, cy + 1.3, cz, 0.04, 2.4, 2.8, 0, 0);
-    b.color('#5b6064');
-    for (const dz of [-1.0, -0.4, 0.4, 1.0]) b.box(cx + 1.27, cy + 1.3, cz + dz, 0.04, 2.3, 0.04, 0, 0);
+    if (shapedReefer) {
+      // header and sill that close the corrugated end; two leaves with gaskets, ribs, kick plates and hinges;
+      // round locking rods in guides with cams top and bottom, a handle on each in its retainer
+      b.box(cx + 1.225, cy + 2.53, cz, 0.05, 0.1, 2.9, 0, 0);
+      b.box(cx + 1.225, cy + 0.11, cz, 0.05, 0.1, 2.9, 0, 0);
+      for (const s of [-1, 1]) {
+        const lz = cz + s * 0.7,
+          fx = cx + 1.262;
+        b.color('#dfe2de');
+        b.box(cx + 1.235, cy + 1.31, lz, 0.05, 2.3, 1.36, 0, 0);
+        b.color('#cdd0cc');
+        for (let k = 0; k < 5; k++) b.box(fx, cy + 0.72 + k * 0.4, lz, 0.008, 0.13, 1.2, 0, 0);
+        b.color('#aeb3b4');
+        b.box(fx, cy + 0.32, lz, 0.006, 0.36, 1.3, 0, 0);
+        b.color('#17191a');
+        b.box(fx, cy + 1.31, cz + s * 1.385, 0.012, 2.32, 0.02, 0, 0);
+        b.box(fx, cy + 1.31, cz + s * 0.012, 0.012, 2.32, 0.02, 0, 0);
+        for (const yy of [0.15, 2.47]) b.box(fx, cy + yy, lz, 0.012, 0.02, 1.38, 0, 0);
+        b.color('#6a6f72');
+        for (const yy of [0.35, 1.0, 1.65, 2.3]) {
+          b.box(fx + 0.012, cy + yy, cz + s * 1.36, 0.03, 0.11, 0.09, 0, 0);
+          b.vcyl(fx + 0.03, cy + yy - 0.06, cz + s * 1.4, 0.012, 0.12, 6, 2);
+        }
+        for (const dz of [0.38, 1.04]) {
+          const z = cz + s * dz;
+          b.color('#7b8083');
+          b.vcyl(cx + 1.295, cy + 0.13, z, 0.017, 2.36, 8, 0);
+          for (const yy of [0.62, 1.82]) b.box(cx + 1.28, cy + yy, z, 0.03, 0.045, 0.08, 0, 0);
+          b.color('#55595c');
+          for (const yy of [0.13, 2.49]) {
+            b.box(cx + 1.292, cy + yy, z, 0.05, 0.08, 0.07, 0, 0);
+            b.box(cx + 1.272, cy + yy + (yy < 1 ? -0.035 : 0.035), z + s * 0.05, 0.03, 0.04, 0.05, 0, 0);
+          }
+          b.box(cx + 1.3, cy + 1.12, z, 0.03, 0.08, 0.06, 0, 0);
+          b.cyl([cx + 1.312, cy + 1.12, z], [cx + 1.33, cy + 1.12, z - s * 0.3], 0.012, 0.012, 6, 3);
+          b.color('#2f6fa8');
+          b.box(cx + 1.298, cy + 1.12, z - s * 0.31, 0.02, 0.055, 0.05, 0, 0);
+        }
+      }
+      // data plate and a customs seal
+      b.color('#aab0b2');
+      b.box(cx + 1.266, cy + 1.86, cz + 0.72, 0.004, 0.2, 0.3, 0, 0);
+      b.color('#d8b22a');
+      b.box(cx + 1.325, cy + 1.03, cz + 0.38, 0.012, 0.05, 0.012, 0, 0);
+    } else {
+      b.box(cx + 1.23, cy + 1.3, cz, 0.04, 2.4, 2.8, 0, 0);
+      b.color('#5b6064');
+      for (const dz of [-1.0, -0.4, 0.4, 1.0]) b.box(cx + 1.27, cy + 1.3, cz + dz, 0.04, 2.3, 0.04, 0, 0);
+    }
     b.color('#3a3f44');
     b.box(cx, cy + 1.3, cz + 1.55, 2.2, 2.3, 0.12, 0, 0);
     b.color('#1d2125');
     for (const dx of [-0.5, 0.5]) b.cyl([cx + dx, cy + 1.65, cz + 1.6], [cx + dx, cy + 1.65, cz + 1.63], 0.33, 0.33, 12, 3);
     b.color('#b8bcbe');
     b.box(cx + 0.7, cy + 0.6, cz + 1.62, 0.5, 0.4, 0.03, 0, 0);
+    if (shapedReefer) {
+      // the unit's face: fan guards (rings and spokes), a louvred compressor bay, a frame, a controller, the mains lead on its hook
+      const z = cz + 1.645;
+      b.color('#565c61');
+      for (const dx of [-0.5, 0.5]) {
+        const fx = cx + dx,
+          fy = cy + 1.65;
+        for (const rr of [0.33, 0.22, 0.11]) {
+          const pts: V3[] = [];
+          for (let i = 0; i <= 18; i++) pts.push([fx + Math.cos((i / 18) * Math.PI * 2) * rr, fy + Math.sin((i / 18) * Math.PI * 2) * rr, z]);
+          b.tube(pts, 0.006, 4);
+        }
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2 + 0.4;
+          b.tube([[fx, fy, z], [fx + Math.cos(a) * 0.33, fy + Math.sin(a) * 0.33, z]], 0.006, 4);
+        }
+        b.vcyl(fx, fy - 0.01, z, 0.05, 0.02, 10, 2);
+      }
+      b.color('#4a4f54');
+      for (const [fx, fy, sx, sy] of [[0, 2.42, 2.14, 0.06], [0, 1.2, 2.14, 0.05], [0, 0.2, 2.14, 0.06]] as [number, number, number, number][]) b.box(cx + fx, cy + fy, z - 0.015, sx, sy, 0.04, 0, 0);
+      for (const fx of [-1.05, 0, 1.05]) b.box(cx + fx, cy + 1.3, z - 0.015, 0.06, 2.24, 0.04, 0, 0);
+      b.color('#2a2e32');
+      for (let k = 0; k < 9; k++) b.box(cx - 0.5, cy + 0.32 + k * 0.09, z - 0.022, 0.92, 0.04, 0.03, 0, 0);
+      b.color('#8f9498');
+      b.box(cx + 0.7, cy + 0.6, cz + 1.638, 0.46, 0.36, 0.006, 0, 0);
+      b.color('#15181a');
+      b.box(cx + 0.62, cy + 0.68, cz + 1.643, 0.2, 0.09, 0.004, 0, 0);
+      b.color('#3f9a55');
+      b.box(cx + 0.82, cy + 0.68, cz + 1.643, 0.03, 0.03, 0.004, 0, 0);
+      b.color('#e7c33c');
+      b.box(cx + 0.7, cy + 0.5, cz + 1.643, 0.16, 0.08, 0.003, 0, 0);
+      b.color('#1a1c1e');
+      const lead: V3[] = [];
+      for (let i = 0; i <= 26; i++) {
+        const a = (i / 26) * Math.PI * 4;
+        lead.push([cx - 0.82 + Math.cos(a) * 0.1, cy + 0.66 + Math.sin(a) * 0.14, z + 0.01 + i * 0.0012]);
+      }
+      b.tube(lead, 0.011, 4);
+    }
     // drip stain + a hose from the reefer drain
     stain(b, cx + 0.2, cy, cz + 2.0, 1.4, 1.0, '#575c5b', 0.4);
     if (REEFER) {

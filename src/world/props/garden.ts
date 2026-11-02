@@ -137,6 +137,39 @@ export function loungeSet(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const rattan = rng.pick(['#5a4232', '#3f3a36', '#8c7a62']);
   const cush = rng.pick(CUSHION);
+  if (shapeOn('shapegarden')) {
+    // woven frames with soft edges on short feet, a band round the middle; cushions you could sit on
+    const seat = (cx: number, cz: number, w: number, d: number, yaw: number) => {
+      sh.push().local(cx, 0, cz, 0, yaw);
+      k.m(rattan, 'wood');
+      cbox(sh, 0, 0.23, 0, w, 0.32, d, 0.035);
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) sh.cyl(sx * (w / 2 - 0.05), 0, sz * (d / 2 - 0.05), 0.022, 0.02, 0.08, 6, 0);
+      cbox(sh, 0, 0.52, -d / 2 + 0.07, w, 0.42, 0.14, 0.04, 1);
+      for (const s of [-1, 1]) cbox(sh, s * (w / 2 - 0.07), 0.3, 0, 0.14, 0.46, d, 0.04, 1);
+      k.s.r *= 0.7;
+      k.s.g *= 0.7;
+      k.s.b *= 0.7;
+      sh.box(0, 0.26, d / 2 + 0.001, w - 0.05, 0.012, 0.002, 0);
+      k.m(cush, 'rubber');
+      const seats = Math.max(1, Math.round((w - 0.3) / 0.55)),
+        cw = (w - 0.3) / seats;
+      for (let i = 0; i < seats; i++) {
+        const x = (i - (seats - 1) / 2) * cw;
+        softBlob(sh, x, 0.44, 0.05, cw * 0.5, 0.075, (d - 0.16) * 0.47, 0.32, 0.6, 0.012, i + cx * 9, 6, 12);
+        sh.push().local(x, 0.66, -d / 2 + 0.2, -0.22);
+        softBlob(sh, 0, 0, 0, cw * 0.47, 0.2, 0.07, 0.32, 0.6, 0.012, i * 3 + cz * 7, 6, 12);
+        sh.pop();
+      }
+      sh.pop();
+    };
+    seat(-0.2, -0.6, 2.0, 0.75, 0);
+    seat(1.05, 0.35, 0.8, 0.72, -Math.PI / 2);
+    k.m(rattan, 'wood');
+    cbox(sh, -0.2, 0.18, 0.35, 0.9, 0.36, 0.55, 0.03);
+    k.m('#cfd6d8', 'glass');
+    sh.box(-0.2, 0.37, 0.35, 0.86, 0.02, 0.5, 0);
+    return;
+  }
   // sofa along the back (-z), facing +z
   k.m(rattan, 'wood');
   sh.box(-0.2, 0.2, -0.6, 2.0, 0.4, 0.75, 1);
@@ -1027,6 +1060,13 @@ export function loungers(k: Kit, rng: Rng): void {
 export function birdbath(k: Kit, rng: Rng): void {
   const sh = k.sh;
   k.m(rng.pick(['#cfc6b4', '#b9b3a8', '#d8cdb8']), 'stone');
+  if (shapeOn('shapegarden')) {
+    // cast stone off a template: stepped foot, baluster, a shallow dished bowl with a rim, greener water
+    smoothLathe(sh, 0, 0, [[0.2, 0], [0.2, 0.035], [0.15, 0.06], [0.1, 0.12], [0.07, 0.3], [0.09, 0.42], [0.075, 0.56], [0.1, 0.66], [0.26, 0.72], [0.325, 0.78], [0.325, 0.815], [0.29, 0.815], [0.25, 0.775]], 22);
+    k.m('#6d8f7c', 'glass');
+    sh.disc(0, 0.79, 0, 0.272, 22, 1);
+    return;
+  }
   sh.cyl(0, 0, 0, 0.18, 0.14, 0.08, 8, 2);
   sh.cyl(0, 0.08, 0, 0.08, 0.1, 0.62, 8, 0);
   sh.cyl(0, 0.7, 0, 0.12, 0.3, 0.1, 10, 0);

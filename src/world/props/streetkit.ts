@@ -5,6 +5,7 @@
 // pavement lights. Local frame as in furniture.ts: origin on the ground, +Y up, +Z = the front (towards the walker).
 // `k` = fine cell, `kd` = near-only cell (the small parts), printed faces go to the Printer's own near mesh.
 
+import { shapeOn } from '../../core/sweepshape';
 import { hash01, type Rng } from '../../core/rng';
 import type { GreenKit } from '../buildings/green';
 import { GREEN } from '../buildings/green';
@@ -447,9 +448,26 @@ export function guardRail(k: Kit, kd: Kit, L: number, col: string): void {
 export function postNotice(kd: Kit, printer: Printer | null, r: number, y: number, seed: number): void {
   const sh = kd.sh;
   kd.m('#16161a', 'plastic');
-  for (const dy of [-0.12, 0.12]) sh.cyl(0, y + dy - 0.004, 0, r + 0.003, r + 0.003, 0.008, 8, 0);
+  const shaped = shapeOn('shapenotice');
+  for (const dy of [-0.12, 0.12]) {
+    sh.cyl(0, y + dy - (shaped ? 0.002 : 0.004), 0, r + (shaped ? 0.0015 : 0.003), r + (shaped ? 0.0015 : 0.003), shaped ? 0.005 : 0.008, shaped ? 22 : 8, 0);
+    if (shaped) {
+      // the tie's head and its cut tail
+      sh.box(0.1, y + dy, r + 0.012, 0.011, 0.012, 0.009, 0);
+      sh.box(0.118, y + dy - 0.002, r + 0.012, 0.03, 0.004, 0.0015, 0);
+    }
+  }
   kd.m('#7a7468', 'wood');
   sh.box(0, y, r + 0.005, 0.22, 0.31, 0.004, 1 | 4);
+  if (shaped) {
+    // a corner lifted by the wind, a tab torn off and a strip of an older notice under it
+    kd.m('#e2ddcd', 'plastic');
+    sh.push().local(0.095, y - 0.145, r + 0.009, 0.55, 0, 0.75);
+    sh.box(0, 0, 0, 0.03, 0.03, 0.0008, 0);
+    sh.pop();
+    kd.m('#b9b4a2', 'plastic');
+    sh.box(-0.03, y - 0.2, r - 0.001, 0.1, 0.05, 0.002, 0);
+  }
   printer?.quad(sh, `notice:${seed % 12}`, 0, y, r + 0.0075, 0.21, 0.3, 42, 60, noticeDraw(seed % 12));
   markProp(sh, 'notice', 0, y, r + 0.0078, 0.21, 0.3, seed);
 }
@@ -557,6 +575,8 @@ export function bookCart(k: Kit, kd: Kit, rng: Rng): void {
   sh.box(0, 0.09, -0.21, 1.1, 0.16, 0.02, 1);
   sh.box(0, 0.05, 0.21, 1.1, 0.08, 0.02, 1);
   for (const x of [-0.55, 0.55]) sh.box(x, 0.07, 0, 0.02, 0.14, 0.44, 1);
+  const shapedBooks = shapeOn('shapebooks');
+  if (shapedBooks) kd.sh.push().local(0, 0.72, 0, 0.3, 0, 0);
   // books standing with their spines up: two rows
   for (const z of [-0.1, 0.09]) {
     let x = -0.52;
@@ -565,9 +585,23 @@ export function bookCart(k: Kit, kd: Kit, rng: Rng): void {
         h = rng.range(0.14, 0.2);
       k.m(rng.pick(COL), 'plastic');
       sh.box(x + w / 2, 0.015 + h / 2, z, w, h, 0.15, 1 | 16 | 32);
+      if (shapedBooks) {
+        // on the spine: gilt bands, or a small paper label, or nothing
+        const lab = rng.next(),
+          top = 0.015 + h + 0.0008;
+        if (lab < 0.45) {
+          kd.m('#b89a4a', 'steel');
+          for (const dz of [-0.058, 0.058]) kd.sh.box(x + w / 2, top, z + dz, w * 0.9, 0.0012, 0.003, 0);
+          kd.sh.box(x + w / 2, top, z + rng.range(-0.02, 0.02), w * 0.34, 0.0012, 0.05, 0);
+        } else if (lab < 0.65) {
+          kd.m('#d9d2bd', 'plastic');
+          kd.sh.box(x + w / 2, top, z + 0.05, w * 0.74, 0.0012, 0.022, 0);
+        }
+      }
       x += w + 0.002;
     }
   }
+  if (shapedBooks) kd.sh.pop();
   sh.pop();
   k.m('#3a3a3c', 'iron');
   for (const x of [-0.48, 0.48]) {

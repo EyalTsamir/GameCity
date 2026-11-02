@@ -397,7 +397,7 @@ export default function create(ctx: CityContext): CityModule {
         }
         case 'infoBoard':
           at(kf);
-          SK.infoBoard(kf, srng);
+          SK.infoBoard(kf, srng, printer ? { printer, plan: ctx.plan, x: it.x, z: it.z } : undefined);
           break;
         case 'sculpture':
           at(KS);
@@ -429,7 +429,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'skip':
           at(KS);
-          SK.skip(KS, srng);
+          SK.skip(KS, srng, yardGoods(it.x, y, it.z, it.yaw));
           break;
         case 'forklift':
           at(KS);
@@ -517,7 +517,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'timber':
           at(kf);
-          SK.timber(kf, srng);
+          SK.timber(kf, srng, yardGoods(it.x, y, it.z, it.yaw));
           break;
         case 'taxiSign':
           at(kf);

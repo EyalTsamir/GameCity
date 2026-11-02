@@ -21,6 +21,7 @@
 // Lights and decals are always kept (they glow / carry the colour identity).
 // The merged geometry is indexed (welded) so shared vertices are shaded once.
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { mergeGeometries, mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
@@ -3271,6 +3272,28 @@ function icecream(): THREE.BufferGeometry {
   cabSide(b, W / 2, 0.82, 0.5, 1.7, L / 2 - 0.72, L / 2 - 1.2, 0.75, glass);
   // serving hatch (kerb side) with striped awning
   b.add(bx(0.03, 0.74, 1.95, -W / 2 - 0.005, 1.18, -0.55), { color: '#3a2a22', light: LIGHT_CABIN, rough: 0.3 });
+  if (LOD === 0 && shapeOn('shapevan')) {
+    // the frame, a sliding pane over the rear half, a counter on brackets; behind the opening a lit wall with tubs, a rack of cones, a price board
+    const hx = -W / 2,
+      z0 = -0.55,
+      frame = { color: '#d9dcdc', rough: 0.45 };
+    b.add(bx(0.05, 0.04, 2.02, hx - 0.03, 1.55, z0), frame);
+    for (const dz of [-0.99, 0.99]) b.add(bx(0.05, 0.4, 0.04, hx - 0.03, 1.36, z0 + dz), frame);
+    b.add(bx(0.05, 0.36, 0.03, hx - 0.03, 1.36, z0 - 0.1), frame);
+    b.add(bx(0.008, 0.34, 0.86, hx - 0.03, 1.36, z0 - 0.54), { color: '#8fa6ad', rough: 0.15 });
+    b.add(bx(0.22, 0.03, 2.04, hx - 0.14, 1.175, z0), { color: '#e9ebe8', rough: 0.5 });
+    for (const dz of [-0.8, 0, 0.8]) b.add(tube(hx - 0.02, 1.06, z0 + dz, hx - 0.2, 1.16, z0 + dz, 0.012), { color: '#9aa0a2', rough: 0.5 });
+    b.add(bx(0.006, 0.34, 0.9, hx - 0.022, 1.37, z0 + 0.45), { color: '#f2ead8', light: LIGHT_CABIN, rough: 0.6 });
+    for (let i = 0; i < 6; i++) b.add(bx(0.012, 0.05, 0.1, hx - 0.028, 1.24, z0 + 0.08 + i * 0.145), { color: ['#f7d6e0', '#fff2c8', '#7a4a30', '#c8e6c0', '#f4f0e4', '#e8a0a8'][i], rough: 0.7 });
+    for (let i = 0; i < 5; i++) {
+      const cone = new THREE.ConeGeometry(0.018, 0.09, sg(6), 1);
+      cone.rotateX(Math.PI);
+      cone.translate(hx - 0.09, 1.235, z0 + 0.22 + i * 0.06);
+      b.add(cone, { color: '#c98f4c', rough: 1 });
+    }
+    b.add(bx(0.01, 0.14, 0.28, hx - 0.028, 1.42, z0 + 0.72), { color: '#262a2c', rough: 0.8 });
+    for (let i = 0; i < 4; i++) b.add(bx(0.003, 0.012, 0.2 - (i % 2) * 0.05, hx - 0.034, 1.47 - i * 0.03, z0 + 0.72), { color: '#efe9da', rough: 0.8 });
+  }
   for (let i = 0; i < 6; i++) b.add(bx(0.62, 0.05, 0.36, -W / 2 - 0.27, 1.98 - 0.0, -1.45 + i * 0.36), { color: i % 2 === 0 ? '#e9547e' : '#ffffff' });
   b.add(decalPlane(2.1, 0.42, -W / 2 - 0.022, 0.97, -0.55, 'nx'), { color: '#ffffff', decal: R_ICECREAM });
   b.add(decalPlane(3.2, 1.0, W / 2 + 0.012, 1.42, -0.5, 'px'), { color: '#ffffff', decal: R_ICECREAM });

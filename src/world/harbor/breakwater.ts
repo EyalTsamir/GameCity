@@ -2,6 +2,7 @@
 // walkway with a seaward crown wall, emerging from the rocky cliff; round head carrying the
 // red-and-white lighthouse (gallery, lantern room with a glowing lens, dome, vane).
 
+import { shapeOn } from '../../core/sweepshape';
 import { addLampLights } from '../../core/lampLight';
 import { addActor } from '../../sim/pedestrians/actorDefs';
 import * as THREE from 'three';
@@ -64,7 +65,11 @@ function tetrapod(b: HB, x: number, y: number, z: number, s: number, rng: Rng): 
   const v = new THREE.Vector3();
   for (const l of legs) {
     v.set(l[0], l[1], l[2]).normalize().applyQuaternion(q).multiplyScalar(s);
-    b.cyl([x, y, z], [x + v.x, y + v.y, z + v.z], s * 0.42, s * 0.24, 6, 2);
+    // eight sides are enough for cast concrete; a chamfered foot (?noshapelighthouse: six plain ones)
+    if (shapeOn('shapelighthouse')) {
+      b.cyl([x, y, z], [x + v.x * 0.92, y + v.y * 0.92, z + v.z * 0.92], s * 0.42, s * 0.25, 9, 0);
+      b.cyl([x + v.x * 0.92, y + v.y * 0.92, z + v.z * 0.92], [x + v.x, y + v.y, z + v.z], s * 0.25, s * 0.19, 9, 2);
+    } else b.cyl([x, y, z], [x + v.x, y + v.y, z + v.z], s * 0.42, s * 0.24, 6, 2);
   }
 }
 
@@ -325,7 +330,14 @@ export function buildBreakwater(
       r1 = 1.35;
     const rAt = (y: number) => r0 + (r1 - r0) * ((y - y0) / (yTop - y0));
     b.color('#8e8a82');
-    b.cyl([lx, y0, lz], [lx, y0 + 0.45, lz], r0 + 0.25, r0 + 0.2, LIFE ? 36 : 20, 2);
+    const shapedLh = shapeOn('shapelighthouse');
+    b.cyl([lx, y0, lz], [lx, y0 + 0.45, lz], r0 + 0.25, r0 + 0.2, shapedLh ? 72 : LIFE ? 36 : 20, 2);
+    if (shapedLh) {
+      // a weathered drip course at the tower's foot
+      b.color('#79756c');
+      b.cyl([lx, y0 + 0.45, lz], [lx, y0 + 0.5, lz], r0 + 0.2, r0 + 0.03, 72, 0);
+      b.color('#8e8a82');
+    }
     const bands = 6;
     for (let k = 0; k < bands; k++) {
       const ya = y0 + 0.45 + ((yTop - y0 - 0.45) * k) / bands,
@@ -399,6 +411,18 @@ export function buildBreakwater(
         const px = lx + Math.sin(a) * (r0 + 0.55),
           pz = lz + Math.cos(a) * (r0 + 0.55);
         b.color('#2a2d2c');
+        if (shapedLh) {
+          // a cast uplighter let into the slab: a low drum with a lipped ring, four screws, the glass set in it
+          b.vcyl(px, y0, pz, 0.16, 0.05, 20, 2, 0.15);
+          b.color('#454947');
+          b.vcyl(px, y0 + 0.05, pz, 0.135, 0.01, 20, 2);
+          b.color('#17191a');
+          for (let q = 0; q < 4; q++) b.vcyl(px + Math.cos(q * 1.57 + 0.78) * 0.145, y0 + 0.05, pz + Math.sin(q * 1.57 + 0.78) * 0.145, 0.008, 0.008, 6, 2);
+          b.color('#fff3d8').emit('#ffeccc', 2.6, EMIT.LIGHTS);
+          b.vcyl(px, y0 + 0.06, pz, 0.105, 0.004, 20, 2);
+          b.noEmit();
+          continue;
+        }
         b.boxMM(px - 0.12, y0, pz - 0.12, px + 0.12, y0 + 0.14, pz + 0.12);
         b.color('#fff3d8').emit('#ffeccc', 2.6, EMIT.LIGHTS);
         b.boxMM(px - 0.09, y0 + 0.14, pz - 0.09, px + 0.09, y0 + 0.155, pz + 0.09);

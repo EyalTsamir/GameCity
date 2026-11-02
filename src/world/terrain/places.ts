@@ -12,6 +12,7 @@
 // Quality: on 'low' (or ?noplacedetail) balustrades are solid parapets and the gatehouse has no arch ring
 // or windows.
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rect } from '../../core/geom';
@@ -22,6 +23,7 @@ import { stairY, islandBridgeY, type CuttingPlace, type IslandBridgePlace, type 
 import type { GeoBuilder, V3 } from './builder';
 import type { TerrainModel } from './height';
 import { KIND } from './kinds';
+import { FONT } from '../props/shapes';
 import type { GlowPoint } from './glow';
 
 const C = (h: string) => new THREE.Color(h);
@@ -1198,6 +1200,8 @@ function edgeWood(b: GeoBuilder, E: EdgePlace): void {
   // fingerpost: square post, a cap, two arms (up the lane, along the promenade) with pointed ends
   {
     const { x, z } = E.post;
+    if (shapeOn('shapefingerpost')) fingerpost(b, x, z);
+    else {
     b.color(C('#d9d2c3')).set('aMas', KIND.plain, 0, 1, 0);
     b.box(x, 1.15, z, 0.055, 1.15, 0.055, 0, 4);
     b.box(x, 2.33, z, 0.08, 0.03, 0.08, 0, 4);
@@ -1216,6 +1220,56 @@ function edgeWood(b: GeoBuilder, E: EdgePlace): void {
     ] as [number, number, number][]) {
       const yaw = Math.atan2(-dz, dx);
       for (const sd of [-1, 1]) b.box(x + dx * 0.34 - dz * sd * 0.018, y, z + dz * 0.34 + dx * sd * 0.018, 0.2, 0.012, 0.002, yaw, 0);
+    }
+    }
+  }
+}
+
+/** A cast post painted black and white: stepped base, slim shaft, collars, a ball finial; arms with a raised rim, a pointed end and words on both faces. */
+function fingerpost(b: GeoBuilder, x: number, z: number): void {
+  const black = C('#23251f'),
+    white = C('#e6e2d6');
+  b.color(black).set('aMas', KIND.plain, 0, 1, 0);
+  b.lathe(x, z, [[0, 0.1], [0.06, 0.1], [0.09, 0.08], [0.42, 0.06], [0.46, 0.066], [0.5, 0.05]], 14);
+  b.color(white).set('aMas', KIND.plain, 0, 1, 0);
+  b.lathe(x, z, [[0.5, 0.044], [2.24, 0.034]], 14);
+  b.color(black).set('aMas', KIND.plain, 0, 1, 0);
+  b.lathe(x, z, [[2.24, 0.04], [2.26, 0.04], [2.275, 0.028], [2.3, 0.038], [2.335, 0.042], [2.365, 0.034], [2.385, 0.016], [2.39, 0]], 14);
+  for (const [dx, dz, y, word] of [
+    [0, -1, 2.02, 'SHORE 1'],
+    [1, 0, 1.8, 'TOWN 2'],
+  ] as [number, number, number, string][]) {
+    const yaw = Math.atan2(-dz, dx);
+    b.color(black).set('aMas', KIND.plain, 0, 1, 0);
+    b.lathe(x, z, [[y - 0.07, 0.036], [y - 0.06, 0.04], [y + 0.06, 0.04], [y + 0.07, 0.036]], 14);
+    b.color(white).set('aMas', KIND.plain, 0, 1, 0);
+    b.box(x + dx * 0.36, y, z + dz * 0.36, 0.3, 0.075, 0.014, yaw, 0);
+    for (const sd of [-1, 1]) {
+      const n: V3 = [-dz * sd * 0.014, 0, dx * sd * 0.014],
+        e0: V3 = [x + dx * 0.66 + n[0], y + 0.075, z + dz * 0.66 + n[2]],
+        e1: V3 = [x + dx * 0.66 + n[0], y - 0.075, z + dz * 0.66 + n[2]],
+        tip: V3 = [x + dx * 0.76 + n[0], y, z + dz * 0.76 + n[2]];
+      b.triangle(e0, sd * dx - sd * dz > 0 ? tip : e1, sd * dx - sd * dz > 0 ? e1 : tip);
+      b.triangle(e0, sd * dx - sd * dz > 0 ? e1 : tip, sd * dx - sd * dz > 0 ? tip : e1);
+    }
+    // the raised rim, both edges and a stub into the collar
+    b.color(black).set('aMas', KIND.dark, 0, 1, 0);
+    for (const sy of [-1, 1]) b.box(x + dx * 0.36, y + sy * 0.072, z + dz * 0.36, 0.3, 0.005, 0.017, yaw, 0);
+    // the place and the distance, in cut letters, on each face; read left to right from either side, so one face runs back from the tip
+    const px = 0.0115,
+      len = word.length * 4 * px - px;
+    for (const sd of [-1, 1]) {
+      for (let c = 0; c < word.length; c++) {
+        const g = FONT[word[c]];
+        if (!g) continue;
+        for (let row = 0; row < 5; row++)
+          for (let col = 0; col < 3; col++) {
+            if (g[row * 3 + col] !== '#') continue;
+            const along = (c * 4 + col + 0.5) * px - len / 2,
+              ux = 0.36 + (sd > 0 ? along : -along);
+            b.box(x + dx * ux - dz * sd * 0.015, y + (2 - row) * px, z + dz * ux + dx * sd * 0.015, px * 0.46, px * 0.46, 0.001, yaw, 0);
+          }
+      }
     }
   }
 }

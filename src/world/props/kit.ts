@@ -12,7 +12,10 @@ import { markProp } from '../lettering/spots';
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
 import { Kit, spokedWheel } from './furniture';
-import { cbox, lathe, softBlob } from './shapes';
+import { cbox, lathe, pixelText, smoothLathe, softBlob } from './shapes';
+import { drawCityMap, mapPoint, MAP_H, MAP_W } from './cityMap';
+import type { Printer } from './print';
+import type { CityPlan } from '../../core/plan';
 import { parasol, wheelieBins, CANVAS } from './garden';
 import type { ChairOut } from './service';
 import { GREEN, type GreenKit } from '../buildings/green';
@@ -242,11 +245,18 @@ export function planter(k: Kit, rng: Rng, round: boolean, green?: GreenKit): voi
   const sh = k.sh;
   const body = round ? rng.pick(['#c9c3b7', '#8a6a52', '#4f5a52']) : rng.pick(['#c4beb3', '#8a4a2e', '#3f4549', '#d8d0c0']);
   k.m(body, body === '#8a4a2e' ? 'iron' : 'stone');
-  if (round) sh.cyl(0, 0, 0, 0.62, 0.58, 0.55, 12, 2);
+  const shapedPot = shapeOn('shapeplanter');
+  if (round && shapedPot) {
+    // cast round, a foot, a swelling body, a rolled rim with a lip the soil sits below
+    smoothLathe(sh, 0, 0, [[0.5, 0], [0.52, 0.03], [0.58, 0.07], [0.62, 0.42], [0.65, 0.46], [0.66, 0.53], [0.635, 0.57], [0.585, 0.57], [0.57, 0.54]], 30);
+  } else if (shapedPot) {
+    cbox(sh, 0, 0.29, 0, 1.26, 0.58, 1.26, 0.025);
+    cbox(sh, 0, 0.585, 0, 1.33, 0.055, 1.33, 0.016);
+  } else if (round) sh.cyl(0, 0, 0, 0.62, 0.58, 0.55, 12, 2);
   else sh.box(0, 0.3, 0, 1.3, 0.6, 1.3, 1);
   k.m('#4a3233', 'stone');
-  if (round) sh.disc(0, 0.56, 0, 0.55, 10, 1);
-  else sh.box(0, 0.6, 0, 1.18, 0.02, 1.18, 1);
+  if (round) sh.disc(0, shapedPot ? 0.545 : 0.56, 0, shapedPot ? 0.572 : 0.55, shapedPot ? 22 : 10, 1);
+  else sh.box(0, shapedPot ? 0.604 : 0.6, 0, 1.18, 0.02, 1.18, 1);
   if (green) {
     const top = round ? 0.56 : 0.6;
     const centre = rng.weighted([GREEN.SHRUB, GREEN.PALM, GREEN.GRASS, GREEN.LAVENDER], [3, 2, 1.5, 1]);
@@ -307,15 +317,22 @@ export function bikeLite(k: Kit, color: string): void {
     Hd = [0.36, 0.84],
     F = [0.52, r];
   k.m(color, 'paint');
-  const bar = (a: number[], b: number[], w = 0.04) => sh.beam(a[0], a[1], 0, b[0], b[1], 0, w, w, false);
+  const shaped = shapeOn('shapebike');
+  const bar = (a: number[], b: number[], w = 0.04) => (shaped ? sh.tube(a[0], a[1], 0, b[0], b[1], 0, w * 0.45, w * 0.45, 5) : sh.beam(a[0], a[1], 0, b[0], b[1], 0, w, w, false));
   bar(R, C);
   bar(C, S);
   bar(R, S);
   bar(C, Hd);
   bar(Hd, F, 0.03);
   k.m('#2a2a2a', 'plastic');
-  sh.box(S[0] - 0.02, S[1] + 0.06, 0, 0.2, 0.04, 0.08, 1);
-  sh.beam(Hd[0], Hd[1] + 0.08, -0.22, Hd[0], Hd[1] + 0.08, 0.22, 0.03, 0.03, false);
+  if (shaped) {
+    sh.cyl(S[0] - 0.06, S[1] + 0.05, 0, 0.058, 0.05, 0.026, 8, 2);
+    sh.beam(S[0] - 0.04, S[1] + 0.066, 0, S[0] + 0.12, S[1] + 0.062, 0, 0.034, 0.02, false);
+    sh.tube(Hd[0], Hd[1] + 0.08, -0.22, Hd[0], Hd[1] + 0.08, 0.22, 0.013, 0.013, 5);
+  } else {
+    sh.box(S[0] - 0.02, S[1] + 0.06, 0, 0.2, 0.04, 0.08, 1);
+    sh.beam(Hd[0], Hd[1] + 0.08, -0.22, Hd[0], Hd[1] + 0.08, 0.22, 0.03, 0.03, false);
+  }
 }
 
 /** Steel hoop rack along local x with bikes; `fill` = probability per slot. */
@@ -324,6 +341,13 @@ export function bikeRow(k: Kit, rng: Rng, fill: number): void {
   const hoops = [-1.05, -0.35, 0.35, 1.05];
   k.m('#9aa3a8', 'steel');
   for (const x of hoops) {
+    if (shapeOn('shapebike')) {
+      // one bent tube, bolted down on two flanges
+      const pts: [number, number][] = [[-0.32, 0], [-0.32, 0.58], [-0.31, 0.64], [-0.28, 0.68], [-0.23, 0.7], [0.23, 0.7], [0.28, 0.68], [0.31, 0.64], [0.32, 0.58], [0.32, 0]];
+      for (let i = 0; i + 1 < pts.length; i++) sh.tube(x, pts[i][1], pts[i][0], x, pts[i + 1][1], pts[i + 1][0], 0.018, 0.018, 8);
+      for (const s of [-1, 1]) sh.cyl(x, 0, s * 0.32, 0.048, 0.048, 0.008, 10, 2);
+      continue;
+    }
     sh.beam(x, 0, -0.32, x, 0.66, -0.32, 0.035, 0.035, false);
     sh.beam(x, 0, 0.32, x, 0.66, 0.32, 0.035, 0.035, false);
     sh.beam(x, 0.68, -0.34, x, 0.68, 0.34, 0.035, 0.035, false);
@@ -340,14 +364,24 @@ export function bikeRow(k: Kit, rng: Rng, fill: number): void {
 }
 
 /** City map / info board on two posts. */
-export function infoBoard(k: Kit, rng: Rng): void {
+export function infoBoard(k: Kit, rng: Rng, map?: { printer: Printer; plan: CityPlan; x: number; z: number }): void {
   const sh = k.sh;
   const frame = rng.pick(['#2f3a52', '#2f4a3e', '#3a3f45']);
   k.m(frame, 'paint');
-  sh.box(-0.62, 1.0, 0, 0.08, 2.0, 0.08, 1);
-  sh.box(0.62, 1.0, 0, 0.08, 2.0, 0.08, 1);
-  sh.box(0, 1.35, 0, 1.36, 1.0, 0.07, 0);
-  sh.box(0, 2.02, 0, 1.4, 0.14, 0.12, 0);
+  const shapedBoard = shapeOn('shapeboard');
+  if (shapedBoard) {
+    // soft-edged posts, a bolted foot, a hood over the sheet
+    cbox(sh, -0.62, 1.0, 0, 0.08, 2.0, 0.08, 0.012);
+    cbox(sh, 0.62, 1.0, 0, 0.08, 2.0, 0.08, 0.012);
+    for (const x of [-0.62, 0.62]) sh.box(x, 0.012, 0, 0.17, 0.024, 0.17, 1);
+    sh.box(0, 1.35, 0, 1.36, 1.0, 0.07, 0);
+    cbox(sh, 0, 2.02, 0, 1.46, 0.09, 0.24, 0.022, 0);
+  } else {
+    sh.box(-0.62, 1.0, 0, 0.08, 2.0, 0.08, 1);
+    sh.box(0.62, 1.0, 0, 0.08, 2.0, 0.08, 1);
+    sh.box(0, 1.35, 0, 1.36, 1.0, 0.07, 0);
+    sh.box(0, 2.02, 0, 1.4, 0.14, 0.12, 0);
+  }
   // map faces (?noboardmap: the old plain faces): a header band with the title, a street map (river, park,
   // building blocks between paler streets, a red "you are here"), and a legend column with printed lines
   const detail = BOARD_MAP;
@@ -356,6 +390,24 @@ export function infoBoard(k: Kit, rng: Rng): void {
       d = (n: number) => z + sz * 0.004 * n;
     k.e('#ece6d6', '#fff4dc', 0.35);
     sh.box(0, 1.35, z, 1.2, 0.86, 0.01, 0);
+    if (map && shapedBoard) {
+      sh.push().local(0, 0, 0, 0, sz > 0 ? 0 : Math.PI, 0);
+      const front = Math.abs(d(2));
+      const { printer, plan } = map;
+      if (printer.quad(sh, 'citymap', 0, 1.35, front, 1.2, 0.86, MAP_W, MAP_H, (g, w, h) => drawCityMap(plan, g, w, h), 0.3)) {
+        // the pin stands where this board does
+        const [u, v] = mapPoint(plan, map.x, map.z),
+          px = -0.6 + 1.2 * u,
+          py = 1.78 - 0.86 * v;
+        k.m('#d9473f', 'plastic');
+        sh.cyl(px, py + 0.018, front + 0.002, 0.014, 0.014, 0.006, 10, 2);
+        sh.push().local(px, py + 0.018, front + 0.001, Math.PI / 2, 0, 0).cyl(0, 0, 0, 0.016, 0.016, 0.004, 12, 3).pop();
+        sh.beam(px, py + 0.012, front + 0.003, px, py, front + 0.003, 0.006, 0.002);
+        sh.pop();
+        continue;
+      }
+      sh.pop();
+    }
     k.e('#7fa8c8', '#fff4dc', 0.3);
     sh.box(detail ? -0.17 : 0, 1.08, d(1), detail ? 0.86 : 1.2, 0.08, 0.01, 0);
     k.e('#9cc48a', '#fff4dc', 0.3);
@@ -809,7 +861,7 @@ export function drums(k: Kit, rng: Rng, kd?: Kit): void {
 }
 
 /** Open skip (trapezoid container) with rubble / scrap inside. */
-export function skip(ks: Kit, rng: Rng): void {
+export function skip(ks: Kit, rng: Rng, kd?: Kit): void {
   const sh = ks.sh;
   const c = rng.pick(['#e8b23c', '#3f6e4a', '#2f5f9e', '#c9302c']);
   const L0 = 2.6,
@@ -844,6 +896,38 @@ export function skip(ks: Kit, rng: Rng): void {
     sh.ellipsoid(-0.3, 0.6, 0, 1.0, 0.45, 0.65, 0);
     ks.m('#a65d43', 'iron');
     sh.ellipsoid(0.7, 0.75, 0.1, 0.5, 0.35, 0.45, 0);
+  }
+  if (kd && shapeOn('shapeskip')) {
+    // pressed stiffeners up the sides, a box-section rim, skids underneath, chain lugs on the ends, scrapes where it has been dragged, a hire firm's name
+    const ds = kd.sh;
+    kd.m(c, 'paint');
+    kd.s.r *= 0.9;
+    kd.s.g *= 0.9;
+    kd.s.b *= 0.9;
+    for (const f of [-1, 1]) {
+      for (const u of [-0.72, -0.24, 0.24, 0.72]) ds.beam(u * L0 * 0.5, 0.14, f * (W / 2 + 0.012), u * L1 * 0.5, H - 0.05, f * (W / 2 + 0.012), 0.08, 0.028);
+      ds.box(0, 0.11, f * (W / 2 + 0.008), L0 - 0.1, 0.05, 0.018, 0);
+    }
+    kd.m('#35383a', 'steel');
+    for (const f of [-1, 1]) {
+      ds.box(0, 0.05, f * 0.55, L0 + 0.14, 0.1, 0.09, 1);
+      for (const z of [-0.5, 0.5]) {
+        kd.m('#35383a', 'steel');
+        const t = 0.62,
+          ex = (L0 / 2 + (t * (L1 - L0)) / 2) * f,
+          ey = 0.08 + t * (H - 0.08);
+        ds.beam((L0 / 2) * f + f * 0.012, 0.1, z, (L1 / 2 - 0.02) * f + f * 0.012, H - 0.04, z, 0.1, 0.03);
+        ds.box(ex + f * 0.05, ey, z, 0.09, 0.1, 0.05, 0);
+        ds.push().local(ex + f * 0.09, ey, z, Math.PI / 2, 0, 0).cyl(0, -0.07, 0, 0.018, 0.018, 0.14, 8, 3).pop();
+      }
+    }
+    kd.m(rng.chance(0.5) ? '#9a9c9a' : '#6e4a30', 'iron');
+    for (let i = 0; i < 16; i++) {
+      const f = rng.chance(0.5) ? 1 : -1;
+      ds.box(rng.range(-L1 / 2 + 0.3, L1 / 2 - 0.3), rng.chance(0.6) ? H - rng.range(0.03, 0.12) : rng.range(0.14, H - 0.15), f * (W / 2 + 0.002), rng.range(0.03, 0.28), rng.range(0.006, 0.03), 0.002, 0);
+    }
+    kd.m('#f1eee4', 'paint');
+    pixelText(ds, 'HAVEN SKIPS', 0, 0.62, W / 2 + 0.03, 0.022);
   }
 }
 
@@ -1066,6 +1150,28 @@ export function cableReel(k: Kit, rng: Rng, kd?: Kit): void {
       const a = (i / 6) * Math.PI * 2;
       ds.cyl(Math.cos(a) * r * 0.6, w / 2 + 0.0605, Math.sin(a) * r * 0.6, 0.012, 0.012, 0.006, 6, 2);
     }
+    if (shapeOn('shapereel')) {
+      // each flange is planks held by two battens, with a steel-bushed hole for the axle; a stencil; the cable's loose end
+      for (const f of [-1, 1]) {
+        const yf = f * (w / 2 + 0.061);
+        kd.m('#5d4628', 'wood');
+        for (let i = -2; i <= 2; i++) {
+          const px = (i + 0.5) * r * 0.36;
+          ds.box(px, yf, 0, 0.005, 0.002, 2 * Math.sqrt(Math.max(0.01, r * r - px * px)) - 0.008, 0);
+        }
+        kd.m(axis ? '#9c7d4f' : '#8d6f43', 'wood');
+        for (const s of [-1, 1]) ds.box(0, yf + f * 0.011, s * r * 0.52, 1.94 * Math.sqrt(r * r - (r * 0.52 + 0.04) * (r * 0.52 + 0.04)), 0.022, 0.08, 0);
+        kd.m('#55585b', 'steel');
+        ds.cyl(0, yf - 0.002, 0, 0.075, 0.075, 0.006, 16, 2);
+        kd.m('#0d0d0e', 'rubber');
+        ds.cyl(0, yf + f * 0.004 - 0.001, 0, 0.042, 0.042, 0.002, 14, 2);
+      }
+      kd.m(col, 'rubber');
+      const t = wr + 0.008;
+      const g = r - 0.016;
+      const tail = [[t, -w * 0.2, 0], [t + 0.04, -w * 0.26, g * 0.45], [t + 0.04, -w * 0.3, g * 0.85], [t + 0.14, -w * 0.32, g], [t + 0.34, -w * 0.22, g], [t + 0.52, -w * 0.3, g]];
+      for (let i = 0; i + 1 < tail.length; i++) ds.tube(tail[i][0], tail[i][1], tail[i][2], tail[i + 1][0], tail[i + 1][1], tail[i + 1][2], 0.014, 0.014, 6);
+    }
     ds.pop();
   };
   reelNear(-0.25, R, 0, R, R * 0.8, 0.68, true, cable);
@@ -1090,10 +1196,37 @@ export function gasCage(k: Kit, rng: Rng): void {
     sh.box(0, y, 0.4, 1.4, 0.04, 0.04, 0);
   }
   const col = rng.pick(['#e8e4da', '#3f6e4a', '#c9302c', '#2f5f9e']);
+  if (shapeOn('shapegas')) {
+    // a chain across the open front, a hazard diamond on the frame
+    k.m('#55595c', 'steel');
+    for (let i = 0; i < 12; i++) {
+      const t = (i + 0.5) / 12,
+        u = t * 2 - 1;
+      sh.box(-0.64 + t * 1.28, 0.86 - 0.05 * (1 - u * u), 0.42, 0.095, 0.012, 0.012, 0);
+    }
+    k.m('#e8b23c', 'paint');
+    sh.push().local(0.68, 1.42, 0.43, 0, 0, Math.PI / 4).box(0, 0, 0, 0.11, 0.11, 0.003, 0).pop();
+  }
   for (let i = 0; i < rng.int(3, 7); i++) {
     const x = -0.5 + (i % 5) * 0.25,
       z = i < 5 ? -0.12 : 0.18;
-    k.m(rng.chance(0.75) ? col : '#e8b23c', 'paint');
+    const body = rng.chance(0.75) ? col : '#e8b23c';
+    k.m(body, 'paint');
+    if (shapeOn('shapegas')) {
+      // a pressed bottle: a foot ring, a rounded shoulder, a neck ring with the valve in its guard; a shoulder band, a chain across the cage
+      smoothLathe(sh, x, z, [[0.1, 0.02], [0.11, 0.08], [0.11, 1.08], [0.102, 1.17], [0.075, 1.23], [0.04, 1.27], [0.03, 1.29]], 14, i);
+      k.m('#2e3134', 'steel');
+      sh.cyl(x, 0.0, z, 0.103, 0.103, 0.05, 14, 0);
+      k.m(body === '#e8e4da' ? '#3c6d9c' : '#e8e4da', 'paint');
+      sh.cyl(x, 1.02, z, 0.1115, 0.1115, 0.06, 14, 0);
+      k.m('#b39a56', 'steel');
+      sh.cyl(x, 1.29, z, 0.022, 0.018, 0.08, 8, 2);
+      sh.push().local(x, 1.34, z, Math.PI / 2, 0, 0).cyl(0, -0.012, 0, 0.012, 0.012, 0.075, 6, 3).pop();
+      k.m('#2f3236', 'steel');
+      sh.cyl(x, 1.375, z, 0.03, 0.03, 0.012, 10, 2);
+      sh.cyl(x, 1.28, z, 0.042, 0.042, 0.018, 10, 2);
+      continue;
+    }
     sh.cyl(x, 0.02, z, 0.11, 0.11, 1.2, 8, 0);
     sh.ellipsoid(x, 1.22, z, 0.11, 0.08, 0.11, 0);
     k.m('#3a3d40', 'steel');
@@ -1154,6 +1287,37 @@ export function fishBoxes(k: Kit, rng: Rng): void {
     for (let i = 0; i < n; i++) {
       k.m(rng.chance(0.7) ? cA : cB, 'plastic');
       sh.push().local(x, i * 0.26, z, 0, rng.range(-0.06, 0.06));
+      if (shapeOn('shapefishbox')) {
+        const r = k.s.r,
+          g = k.s.g,
+          b = k.s.b;
+        // the moulding: a foot, a body with soft corners, ribs, a handle cut in each end, a rolled rim; the top one of a stack is open
+        cbox(sh, 0, 0.125, 0, 0.74, 0.22, 0.48, 0.02, 1);
+        sh.box(0, 0.246, 0, 0.78, 0.018, 0.52, 0);
+        sh.box(0, 0.012, 0, 0.7, 0.024, 0.44, 1);
+        for (const f of [-1, 1]) {
+          for (const dx of [-0.24, -0.08, 0.08, 0.24]) sh.box(dx, 0.13, f * 0.243, 0.024, 0.2, 0.008, 1);
+          for (const dz of [-0.12, 0.12]) sh.box(f * 0.373, 0.1, dz, 0.008, 0.14, 0.024, 1);
+        }
+        const open = i === n - 1;
+        k.s.r = r * 0.38;
+        k.s.g = g * 0.38;
+        k.s.b = b * 0.38;
+        for (const f of [-1, 1]) sh.box(f * 0.373, 0.2, 0, 0.004, 0.035, 0.13, 0);
+        if (open) {
+          // inside: walls catch the light only at the top, the floor sits deep, a slop of meltwater
+          k.s.r = r * 0.56;
+          k.s.g = g * 0.56;
+          k.s.b = b * 0.56;
+          sh.box(0, 0.2555, 0, 0.7, 0.001, 0.44, 1);
+          k.s.r = r * 0.3;
+          k.s.g = g * 0.3;
+          k.s.b = b * 0.3;
+          sh.box(0, 0.2565, 0, 0.66, 0.001, 0.4, 1);
+        }
+        sh.pop();
+        continue;
+      }
       sh.box(0, 0.13, 0, 0.78, 0.25, 0.52, 1);
       k.s.r *= 0.6;
       k.s.g *= 0.6;
@@ -1652,9 +1816,10 @@ export function pipes(k: Kit, rng: Rng): void {
 }
 
 /** Timber / board stack with spacer battens, sometimes wrapped. */
-export function timber(k: Kit, rng: Rng): void {
+export function timber(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
   const layers = rng.int(4, 8);
+  const shaped = shapeOn('shapetimber');
   const wood = rng.pick(['#c9a46a', '#d8b47a', '#b8946a']);
   for (let l = 0; l < layers; l++) {
     k.m('#8a6a48', 'wood');
@@ -1662,10 +1827,77 @@ export function timber(k: Kit, rng: Rng): void {
     k.m(wood, 'wood');
     k.s.r *= 0.9 + 0.2 * rng.next();
     sh.box(0, 0.12 + l * 0.18, 0, 2.7, 0.1, 1.1, 1);
+    if (kd && shaped) {
+      // up close each layer is boards: seams along the top and the faces, ends not quite flush, pale saw marks, a knot, a stencilled grade
+      const n = 6,
+        ds = kd.sh,
+        y = 0.12 + l * 0.18;
+      for (let i = 0; i < n; i++) {
+        const z = -0.55 + ((i + 0.5) * 1.1) / n,
+          sh2 = 0.82 + rng.next() * 0.3,
+          o = rng.range(-0.018, 0.018);
+        kd.m(wood, 'wood');
+        kd.s.r *= sh2;
+        kd.s.g *= sh2;
+        kd.s.b *= sh2 * 0.95;
+        for (const f of [-1, 1]) ds.box(f * 1.352 + o, y, z, 0.012, 0.094, 1.1 / n - 0.008, 0);
+        if (l === layers - 1) ds.box(0, y + 0.0505, z, 2.68, 0.002, 1.1 / n - 0.006, 0);
+        kd.m('#5f4a30', 'wood');
+        if (i && l === layers - 1) ds.box(0, y + 0.052, z - 0.55 / n, 2.68, 0.002, 0.005, 0);
+      }
+      kd.m('#7a5f3c', 'wood');
+      for (const f of [-1, 1]) for (let i = 1; i < n; i++) ds.box(f * 1.358, y, -0.55 + (i * 1.1) / n, 0.002, 0.094, 0.004, 0);
+      kd.m('#6b5234', 'wood');
+      for (let i = 0; i < 3; i++) ds.cyl(rng.range(-1.2, 1.2), y + 0.05, rng.range(-0.5, 0.5), 0.016, 0.013, 0.0035, 8, 2);
+      // the long faces show boards too, and sag a little between the battens
+      for (const f of [-1, 1]) ds.box(0, y - 0.05, f * 0.552, 2.7, 0.006, 0.004, 0);
+    }
   }
   if (rng.chance(0.35)) {
-    k.m('#2f6fb0', 'plastic');
-    sh.box(0, 0.08 + layers * 0.09, 0, 2.74, layers * 0.18, 1.14, 1);
+    const wrap = rng.pick(['#2f6fb0', '#e6e3da', '#3f6e4a']),
+      h = layers * 0.18;
+    k.m(wrap, 'plastic');
+    if (shaped) {
+      // a printed sheet over the load, soft at the edges, slack; it stops short of the bearers, so timber shows under it
+      cbox(sh, 0, 0.22 + h / 2, 0, 2.74, h - 0.1, 1.14, 0.03, 1);
+      if (kd) {
+        const ds = kd.sh,
+          top = 0.22 + h - 0.05;
+        // gift-wrap folds on the ends, wrinkles where the sheet pulls, three steel bands with their seals, a label
+        kd.m(wrap, 'plastic');
+        kd.s.r *= 0.86;
+        kd.s.g *= 0.86;
+        kd.s.b *= 0.86;
+        for (const f of [-1, 1]) {
+          ds.beam(f * 1.375, top - 0.02, -0.56, f * 1.375, 0.28, 0.02, 0.006, 0.05);
+          ds.beam(f * 1.375, top - 0.02, 0.56, f * 1.375, 0.28, -0.02, 0.006, 0.05);
+          ds.beam(f * 1.375, 0.27, -0.56, f * 1.375, 0.27, 0.56, 0.006, 0.04);
+        }
+        kd.m(wrap, 'plastic');
+        kd.s.r *= 1.08;
+        kd.s.g *= 1.08;
+        kd.s.b *= 1.08;
+        for (let i = 0; i < 7; i++) {
+          const x = rng.range(-1.2, 1.2),
+            z = rng.range(-0.45, 0.45),
+            a = rng.range(-0.6, 0.6),
+            l = rng.range(0.2, 0.55);
+          ds.beam(x - l * Math.cos(a), top + 0.002, z - l * Math.sin(a), x + l * Math.cos(a), top + 0.002, z + l * Math.sin(a), 0.024, 0.003);
+        }
+        for (const x of [-1, 0.05, 1.05]) {
+          kd.m('#3a3d40', 'steel');
+          ds.box(x, top + 0.003, 0, 0.022, 0.002, 1.15, 0);
+          for (const f of [-1, 1]) ds.box(x, 0.22 + h / 2, f * 0.577, 0.022, h - 0.06, 0.002, 0);
+          kd.m('#8e9498', 'steel');
+          ds.box(x, top - 0.12, 0.579, 0.032, 0.04, 0.004, 0);
+        }
+        kd.m('#f1eee4', 'plastic');
+        ds.box(0.55, 0.22 + h * 0.62, 0.579, 0.42, 0.2, 0.002, 0);
+        kd.m('#1d1f22', 'plastic');
+        pixelText(ds, 'C24', 0.55, 0.22 + h * 0.66, 0.58, 0.012);
+        ds.box(0.55, 0.22 + h * 0.54, 0.5805, 0.32, 0.014, 0.001, 0);
+      }
+    } else sh.box(0, 0.08 + layers * 0.09, 0, 2.74, layers * 0.18, 1.14, 1);
   }
 }
 

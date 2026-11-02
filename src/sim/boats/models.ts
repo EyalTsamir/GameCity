@@ -4,6 +4,7 @@
 // Hulls are lofted from stations (smooth normals, sheer, raked stem, transom, boot-top);
 // every vertex carries aKind = tag + 100·variant (see material.ts).
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import { Geo, type V3 } from '../rail/geo';
 import { BT, HC, HC_STEP, JIB_HEAD, JIB_TACK } from './material';
@@ -621,6 +622,16 @@ function lifeRing(g: Geo, x: number, y: number, z: number, faceX: number): void 
 }
 
 function navLamp(g: Geo, x: number, y: number, z: number, kind: number): void {
+  if (shapeOn('shapeboat')) {
+    // every boat's lamps (?noshapeboat): a turned base, a round lens under a cap, not a coloured cube
+    g.kind(BT.PLAIN).color('#2a2c2e');
+    g.cyl(x, y - 0.1, z, 0.08, 0.06, 0.04, 12, 1);
+    g.cyl(x, y - 0.06, z, 0.028, 0.028, 0.03, 8, 0);
+    g.cyl(x, y + 0.055, z, 0.07, 0.05, 0.022, 12, 1);
+    g.kind(kind === 0 ? BT.LAMP_R : kind === 1 ? BT.LAMP_G : BT.LAMP_W).color(kind === 0 ? '#8a1c14' : kind === 1 ? '#1c7a3c' : '#fff3d4');
+    g.cyl(x, y - 0.06, z, 0.058, 0.058, 0.115, 12, 0);
+    return;
+  }
   g.kind(BT.PLAIN).color('#2a2c2e');
   g.box(x, y - 0.08, z, 0.14, 0.05, 0.14, 0);
   g.kind(kind === 0 ? BT.LAMP_R : kind === 1 ? BT.LAMP_G : BT.LAMP_W).color(kind === 0 ? '#8a1c14' : kind === 1 ? '#1c7a3c' : '#e8e6de');
@@ -1496,9 +1507,46 @@ function fishingBoat(g: Geo): void {
   g.cyl(0, D + 2.2, 1.9, 0.06, 0.045, 3.0, 6, 1);
   g.box(0, D + 4.2, 1.9, 1.3, 0.05, 0.08, 0);
   g.color('#e8e6de');
-  g.box(0, D + 2.35, 2.5, 1.2, 0.08, 0.16, 0);
-  g.color('#3a3d40');
-  g.cyl(0, D + 2.2, 2.5, 0.08, 0.08, 0.15, 6, 1);
+  const shapedRoof = shapeOn('shapeboat');
+  if (shapedRoof) {
+    // an open scanner: a slim wing on a drum pedestal, a roof rail, a hatch, two vents and a life-raft canister in its cradle
+    g.cyl(0, D + 2.17, 2.5, 0.17, 0.14, 0.16, 14, 1);
+    g.cyl(0, D + 2.33, 2.5, 0.05, 0.05, 0.05, 8, 0);
+    g.box(0, D + 2.4, 2.5, 1.1, 0.07, 0.11, 0);
+    for (const sx of [-1, 1]) g.box(sx * 0.57, D + 2.4, 2.5, 0.05, 0.05, 0.08, 0);
+    g.color('#3a3d40');
+    g.box(0, D + 2.4, 2.558, 1.02, 0.03, 0.006, 0);
+    g.color('#c8c4b8');
+    for (const [a, b] of [[[-1.05, 0.95], [-1.05, 3.05]], [[1.05, 0.95], [1.05, 3.05]], [[-1.05, 3.05], [1.05, 3.05]]] as number[][][]) {
+      g.beam([a[0], D + 2.42, a[1]], [b[0], D + 2.42, b[1]], 0.03, 0.03);
+      const n = Math.max(1, Math.round(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.7));
+      for (let i = 0; i <= n; i++) g.cyl(a[0] + ((b[0] - a[0]) * i) / n, D + 2.15, a[1] + ((b[1] - a[1]) * i) / n, 0.014, 0.014, 0.27, 6, 0);
+    }
+    g.color('#b7b3a7');
+    g.box(0.45, D + 2.18, 1.2, 0.62, 0.05, 0.62, 0);
+    g.color('#d9d4c6');
+    g.box(0.45, D + 2.215, 1.2, 0.56, 0.03, 0.56, 0);
+    g.color('#3a3d40');
+    g.beam([0.3, D + 2.245, 1.2], [0.6, D + 2.245, 1.2], 0.02, 0.02);
+    g.color('#8f8c84');
+    for (const [vx, vz] of [[-0.65, 1.15], [-0.65, 2.75]]) {
+      g.cyl(vx, D + 2.15, vz, 0.05, 0.05, 0.12, 10, 0);
+      g.cyl(vx, D + 2.27, vz, 0.05, 0.11, 0.045, 12, 0);
+      g.cyl(vx, D + 2.315, vz, 0.11, 0.02, 0.03, 12, 1);
+    }
+    g.color('#f1efe6');
+    g.push().at(0.72, D + 2.33, 2.4).rotX(Math.PI / 2);
+    g.cyl(0, -0.3, 0, 0.17, 0.17, 0.6, 14, 1);
+    g.color('#2f6fa8');
+    g.cyl(0, -0.02, 0, 0.175, 0.175, 0.04, 14, 0);
+    g.pop();
+    g.color('#3a3d40');
+    for (const dz of [-0.2, 0.2]) g.box(0.72, D + 2.18, 2.4 + dz, 0.34, 0.06, 0.04, 0);
+  } else {
+    g.box(0, D + 2.35, 2.5, 1.2, 0.08, 0.16, 0);
+    g.color('#3a3d40');
+    g.cyl(0, D + 2.2, 2.5, 0.08, 0.08, 0.15, 6, 1);
+  }
   g.color('#cfccc4');
   for (const sx of [-0.9, 0.9]) g.cyl(sx, D + 2.2, 1.0, 0.012, 0.008, 1.6, 4, 1);
   for (const L of DIMS.fish.lights) navLamp(g, L[0], L[1], L[2], L[3]);

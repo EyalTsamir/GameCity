@@ -186,7 +186,7 @@ export function ring(sh: Shaper, cx: number, y: number, cz: number, R: number, r
 }
 
 // 3 × 5 pixel font (rows top → bottom, '#' = ink) for lettering built from boxes: props carry no textures
-const FONT: Record<string, string> = {
+export const FONT: Record<string, string> = {
   A: '.#.#.#####.##.#', B: '##.#.###.#.###.', C: '.###..#..#...##', D: '##.#.##.##.###.', E: '####..##.#..###',
   F: '####..##.#..#..', G: '.###..#.##.#.##', H: '#.##.#####.##.#', I: '###.#..#..#.###', J: '..#..#..##.#.#.',
   K: '#.##.###.#.##.#', L: '#..#..#..#..###', M: '#.########.##.#', N: '##.#.##.##.##.#', O: '.#.#.##.##.#.#.',

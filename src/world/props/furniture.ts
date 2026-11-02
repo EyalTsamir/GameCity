@@ -111,6 +111,53 @@ function hatch(kf: Kit, y: number, r: number, h: number, col: string, rng: Rng):
 }
 
 /**
+ * The column up close (?noshapelamp), near only: a rounder skin, the weld seam down its back, a foot chipped and
+ * rusting where mowers and dogs get at it, the tape and staples of old notices, a sprayed survey mark.
+ */
+function poleSkin(kf: Kit, r0: number, r1: number, y0: number, y1: number, col: string, rng: Rng): void {
+  if (!shapeOn('shapelamp')) return;
+  const sh = kf.sh,
+    h = Math.min(y1 - y0, 3.2),
+    rAt = (y: number) => r0 + ((r1 - r0) * (y - y0)) / (y1 - y0),
+    on = (a: number, y: number, sx: number, sy: number, d = 0.0012) => {
+      sh.push().local(0, y, 0, 0, a, 0);
+      sh.box(0, 0, rAt(y) + 0.0012 + d / 2, sx, sy, d, 0);
+      sh.pop();
+    };
+  kf.m(col, 'paint');
+  sh.cyl(0, y0, 0, r0 + 0.0012, rAt(y0 + h) + 0.0012, h, 24, 0);
+  kf.s.r *= 0.82;
+  kf.s.g *= 0.82;
+  kf.s.b *= 0.82;
+  on(Math.PI, y0 + h / 2, 0.005, h, 0.002);
+  // chips and rust at the foot, a few of them weeping down
+  for (let i = 0, n = rng.int(5, 10); i < n; i++) {
+    const a = rng.range(0, 6.3),
+      y = y0 + rng.range(0.02, 0.28) * rng.range(0.4, 1),
+      rust = rng.chance(0.55);
+    kf.m(rust ? rng.pick(['#7a4a2c', '#8e5a35', '#5e3a26']) : '#a9adac', rust ? 'iron' : 'steel');
+    on(a, y, rng.range(0.006, 0.024), rng.range(0.004, 0.016));
+    if (rust && rng.chance(0.4)) {
+      kf.m('#6d4a34', 'iron');
+      on(a, y - 0.03, 0.003, 0.05);
+    }
+  }
+  // what's left of old notices: bands of tape, torn corners, staples
+  if (rng.chance(0.7)) {
+    const y = y0 + rng.range(0.95, 1.5);
+    kf.m(rng.pick(['#b8a878', '#a39a80', '#c6bea2']), 'plastic');
+    for (const dy of [0, rng.range(0.16, 0.3)]) if (rng.chance(0.7)) on(rng.range(-0.6, 0.6), y + dy, rng.range(0.03, 0.07), rng.range(0.012, 0.02));
+    kf.m('#3a3d40', 'steel');
+    for (let i = 0; i < 3; i++) on(rng.range(-0.7, 0.7), y + rng.range(0, 0.25), 0.009, 0.0015);
+  }
+  if (rng.chance(0.3)) {
+    // survey mark sprayed on by whoever came to look at the cable
+    kf.m(rng.pick(['#d8562a', '#e7c33c', '#2f7fbf']), 'paint');
+    on(rng.range(-1.2, 1.2), y0 + 0.5, 0.05, 0.012);
+  }
+}
+
+/**
  * Build a lamp of the given style at the current frame; returns the light head (local).
  * `kf` (optional, framed like k) takes the near-only detail: base mouldings, flanges and bolts, hatches, lantern frames.
  */
@@ -132,6 +179,7 @@ export function lamp(k: Kit, style: LampStyle, street: boolean, rng: Rng, kf?: K
       sh.box(0, 6.975, -reach - 0.3, 0.26, 0.02, 0.8, 2);
       if (kf) {
         flange(kf, 0.16, '#33383d');
+        poleSkin(kf, 0.088, 0.06, 0.38, 7, '#4c535b', rng);
         hatch(kf, 0.62, 0.0865, 0.3, '#4c535b', rng);
         kf.m('#2c3035', 'paint');
         kf.sh.cyl(0, 6.9, 0, 0.075, 0.075, 0.08, 10, 2);
@@ -150,6 +198,7 @@ export function lamp(k: Kit, style: LampStyle, street: boolean, rng: Rng, kf?: K
       sh.ellipsoid(0, 6.56, -1.6, 0.15, 0.045, 0.29, 0);
       if (kf) {
         flange(kf, 0.11, '#8f989d');
+        poleSkin(kf, 0.11, 0.07, 0, 6.35, '#9aa3a8', rng);
         hatch(kf, 0.7, 0.107, 0.3, '#9aa3a8', rng);
         // zinc bloom / grime at the foot of the galvanised column
         kf.m('#7d8378', 'steel');
@@ -171,6 +220,7 @@ export function lamp(k: Kit, style: LampStyle, street: boolean, rng: Rng, kf?: K
         // cast base: plinth step, bead and a collar into the column
         kf.m('#3e4448', 'paint');
         lathe(kf.sh, 0, 0, [[0, 0], [0.142, 0], [0.142, 0.03], [0.134, 0.04], [0.124, 0.33], [0.112, 0.345], [0.09, 0.37], [0.082, 0.42], [0, 0.42]], 12);
+        poleSkin(kf, 0.075, 0.055, 0.35, 5.1, '#3e4448', rng);
         hatch(kf, 0.2, 0.123, 0.18, '#3e4448', rng);
         kf.m('#2f3437', 'paint');
         kf.sh.cyl(0, 4.95, 0, 0.062, 0.062, 0.06, 10, 2);
@@ -193,6 +243,7 @@ export function lamp(k: Kit, style: LampStyle, street: boolean, rng: Rng, kf?: K
       sh.cone(0, 4.62, 0, 0.03, 0.1, 6, false);
       if (kf) {
         flange(kf, 0.11, '#d9d6cc');
+        poleSkin(kf, 0.075, 0.06, 0.3, 3.95, '#f1efe8', rng);
         // lantern cage: four bars over the glass
         kf.m('#24476b', 'paint');
         for (let i = 0; i < 4; i++) {
@@ -215,6 +266,7 @@ export function lamp(k: Kit, style: LampStyle, street: boolean, rng: Rng, kf?: K
       sh.disc(0, 4.0, 0, 0.28, 14, -1);
       if (kf) {
         flange(kf, 0.1, '#3f454c');
+        poleSkin(kf, 0.065, 0.055, 0.2, 4.05, '#4a5058', rng);
         hatch(kf, 0.55, 0.0635, 0.26, '#4a5058', rng);
       }
       return { x: 0, y: 3.95, z: 0, color: LAMP_COL.white, pool: 4.2, halo: 0.75 };
@@ -1145,7 +1197,19 @@ export function setBikeSpokes(on: boolean): void {
  * `spokes` spokes crossing the hub alternately to each flange. */
 export function spokedWheel(k: Kit, x: number, r: number, n: number, spokes: number, tyreSides = 5): void {
   const sh = k.sh;
+  const round = shapeOn('shapebike');
   const ring = (rr: number, w: number, sides: number) => {
+    if (round) {
+      // one turned ring, no segment joints to catch the sun
+      const prof: [number, number][] =
+        sides > 4
+          ? [[rr - w, 0], [rr - w * 0.5, -w * 0.9], [rr + w * 0.5, -w * 0.9], [rr + w, 0], [rr + w * 0.5, w * 0.9], [rr - w * 0.5, w * 0.9], [rr - w, 0]]
+          : [[rr - w, 0], [rr, -w], [rr + w, 0], [rr, w], [rr - w, 0]];
+      sh.push().local(x, r, 0, Math.PI / 2, 0, 0);
+      lathe(sh, 0, 0, prof, Math.max(n, sides > 3 ? 22 : 18));
+      sh.pop();
+      return;
+    }
     for (let i = 0; i < n; i++) {
       const a0 = (i / n) * TAU,
         a1 = ((i + 1) / n) * TAU;
@@ -1188,7 +1252,8 @@ export function bike(k: Kit, color: string): void {
     Hd = [0.36, 0.84],
     F = [0.52, r];
   k.m(color, 'paint');
-  const bar = (a: number[], b: number[], w = 0.035) => sh.beam(a[0], a[1], 0, b[0], b[1], 0, w, w, false);
+  const shaped = shapeOn('shapebike');
+  const bar = (a: number[], b: number[], w = 0.035) => (shaped ? sh.tube(a[0], a[1], 0, b[0], b[1], 0, w / 2, w / 2, 7) : sh.beam(a[0], a[1], 0, b[0], b[1], 0, w, w, false));
   bar(R, C);
   bar(C, S);
   bar(R, S);
@@ -1196,10 +1261,21 @@ export function bike(k: Kit, color: string): void {
   bar(S, [Hd[0] - 0.04, Hd[1] - 0.02]);
   bar(Hd, F, 0.03);
   k.m('#2a2a2a', 'plastic');
-  sh.box(S[0] - 0.02, S[1] + 0.07, 0, 0.22, 0.045, 0.09, 0);
-  sh.beam(Hd[0], Hd[1] + 0.1, -0.24, Hd[0], Hd[1] + 0.1, 0.24, 0.03, 0.03);
+  if (shaped) {
+    // a saddle that narrows to a nose on its post, grips on a round bar
+    sh.tube(S[0], S[1], 0, S[0] - 0.015, S[1] + 0.06, 0, 0.012, 0.012, 6);
+    sh.ellipsoid(S[0] - 0.05, S[1] + 0.07, 0, 0.075, 0.024, 0.062, 0);
+    sh.ellipsoid(S[0] + 0.05, S[1] + 0.066, 0, 0.09, 0.016, 0.024, 0);
+    k.m('#8e959a', 'steel');
+    sh.tube(Hd[0], Hd[1] + 0.1, -0.24, Hd[0], Hd[1] + 0.1, 0.24, 0.012, 0.012, 6);
+    k.m('#1b1c1d', 'rubber');
+    for (const s of [-1, 1]) sh.tube(Hd[0], Hd[1] + 0.1, s * 0.15, Hd[0], Hd[1] + 0.1, s * 0.25, 0.016, 0.016, 6);
+  } else {
+    sh.box(S[0] - 0.02, S[1] + 0.07, 0, 0.22, 0.045, 0.09, 0);
+    sh.beam(Hd[0], Hd[1] + 0.1, -0.24, Hd[0], Hd[1] + 0.1, 0.24, 0.03, 0.03);
+  }
   k.m(color, 'paint');
-  sh.beam(Hd[0], Hd[1], 0, Hd[0], Hd[1] + 0.1, 0, 0.035, 0.035, false);
+  bar(Hd, [Hd[0], Hd[1] + 0.1]);
   if (!BIKE_SPOKES) return;
   // drive side: chainring, crank arms with pedals, the chain to the rear sprocket
   k.m('#8e959a', 'steel');
@@ -1681,8 +1757,44 @@ export function shed(k: Kit, paint: number, rng: Rng, kd?: Kit): void {
   k.e('#9fb4bd', '#ffd59a', 0.25);
   sh.box(0.48, 1.35, D / 2 + 0.01, 0.5, 0.4, 0.02, 0);
   k.m('#b8643f', 'ceramic');
-  for (let i = 0; i < rng.int(1, 3); i++) sh.cyl(0.25 + i * 0.25, 0, D / 2 + 0.3, 0.09, 0.12, 0.22, 6, 2);
+  const shaped = shapeOn('shapeshed');
+  for (let i = 0; i < rng.int(1, 3); i++) {
+    if (shaped) lathe(sh, 0.25 + i * 0.25, D / 2 + 0.3, [[0, 0.01], [0.085, 0.01], [0.112, 0.17], [0.126, 0.17], [0.128, 0.22], [0.108, 0.22], [0.1, 0.19], [0, 0.17]], 14);
+    else sh.cyl(0.25 + i * 0.25, 0, D / 2 + 0.3, 0.09, 0.12, 0.22, 6, 2);
+  }
   if (kd) shedKit(kd, col, W, D, H0);
+  if (kd && shaped) {
+    // the roof up close: three runs of mineral felt lapped down the slope, clout nails along each lap, a fascia and a drip edge, moss where the water runs off
+    const ds = kd.sh,
+      pitch = Math.atan2(H1 - H0, D),
+      L = D / Math.cos(pitch) + 0.25,
+      top = 0.0355;
+    ds.push().local(0, (H0 + H1) / 2 + 0.05, 0, pitch);
+    for (let i = 0; i < 3; i++) {
+      const z = -L / 2 + ((i + 0.5) * L) / 3;
+      kd.m(rng.pick(['#41423d', '#3b3d3a', '#46453d']), 'stone');
+      ds.box(0, top + 0.002 + i * 0.0012, z, W + 0.26, 0.003, L / 3 + 0.05, 0);
+      if (i) {
+        kd.m('#232420', 'stone');
+        ds.box(0, top + 0.0045 + i * 0.0012, z - L / 6 - 0.024, W + 0.26, 0.002, 0.007, 0);
+        kd.m('#83857f', 'steel');
+        for (let n = 0; n < 11; n++) ds.box(-W / 2 - 0.05 + n * (W + 0.1) * 0.1, top + 0.006 + i * 0.0012, z - L / 6 - 0.012, 0.009, 0.002, 0.009, 0);
+      }
+    }
+    kd.m(col, 'wood');
+    kd.s.r *= 0.72;
+    kd.s.g *= 0.72;
+    kd.s.b *= 0.72;
+    for (const s of [-1, 1]) {
+      ds.box(s * (W / 2 + 0.135), -0.02, 0, 0.02, 0.1, L + 0.02, 0);
+      ds.box(0, -0.02, s * (L / 2 + 0.01), W + 0.29, 0.1, 0.02, 0);
+    }
+    kd.m('#6f7471', 'steel');
+    ds.box(0, 0.028, L / 2 + 0.024, W + 0.3, 0.018, 0.012, 0);
+    kd.m('#4d5636', 'stone');
+    for (let n = 0; n < 5; n++) ds.ellipsoid(rng.range(-W / 2, W / 2), top + 0.006, L / 2 - rng.range(0.05, 0.3), rng.range(0.03, 0.07), 0.005, rng.range(0.02, 0.05), 1);
+    ds.pop();
+  }
 }
 
 export function waterButt(k: Kit, rng: Rng): void {
