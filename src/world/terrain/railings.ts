@@ -2,6 +2,7 @@
 // footbridges land and at the ladders), ornamental promenade lamp posts, and iron ladders
 // down the quay walls. One merged mesh; the lamp globes go into the masonry mesh (emissive).
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import { RIVER, SLAB } from '../../core/constants';
 import { GeoBuilder } from './builder';
@@ -168,7 +169,67 @@ export function createRailings(
     }
   }
   // ladders
+  const ROUND_LADDER = shapeOn('shapeladders');
+  const tube8 = ROUND_LADDER ? new THREE.CylinderGeometry(1, 1, 1, 8, 1, true) : null;
+  const _ta = new THREE.Vector3(),
+    _tb = new THREE.Vector3(),
+    _tq = new THREE.Quaternion(),
+    _ts = new THREE.Vector3(),
+    _up = new THREE.Vector3(0, 1, 0),
+    _tm = new THREE.Matrix4();
+  const rod = (ax: number, ay: number, az: number, bx: number, by: number, bz: number, r: number): void => {
+    _ta.set(ax, ay, az);
+    _tb.set(bx, by, bz).sub(_ta);
+    const L = _tb.length();
+    _tq.setFromUnitVectors(_up, _tb.clone().divideScalar(L));
+    _ts.set(r, L, r);
+    _tm.compose(_ta.addScaledVector(_tb, 0.5), _tq, _ts);
+    b.geometry(tube8 as THREE.BufferGeometry, _tm);
+  };
   for (const l of ladders) {
+    if (ROUND_LADDER) {
+      // galvanised tube: stiles that bend over the coping in a quarter circle and come down to a flange, round rungs, stand-offs bolted to the wall; weed and dark up to the tide line
+      const tx = -l.nz,
+        tz = l.nx;
+      const ox = l.x + l.nx * 0.16,
+        oz = l.z + l.nz * 0.16;
+      const yb = -2.6,
+        yr = l.top + 0.72;
+      const tide = -1.05;
+      for (const s of [-0.24, 0.24]) {
+        const sx = ox + tx * s,
+          sz = oz + tz * s;
+        b.color('#2c3a2b');
+        rod(sx, yb, sz, sx, tide, sz, 0.024);
+        b.color(LADDER);
+        rod(sx, tide, sz, sx, yr, sz, 0.024);
+        // the bend, 5 pieces
+        const R = 0.2;
+        let pu = 0,
+          py = yr;
+        for (let i = 1; i <= 5; i++) {
+          const a = (i / 5) * Math.PI;
+          const u = R - Math.cos(a) * R,
+            yy = yr + Math.sin(a) * R;
+          rod(sx - l.nx * pu, py, sz - l.nz * pu, sx - l.nx * u, yy, sz - l.nz * u, 0.024);
+          pu = u;
+          py = yy;
+        }
+        // down to the coping, a flange and its bolts
+        rod(sx - l.nx * 0.4, yr, sz - l.nz * 0.4, sx - l.nx * 0.4, l.top + 0.02, sz - l.nz * 0.4, 0.024);
+        b.box(sx - l.nx * 0.4, l.top + 0.012, sz - l.nz * 0.4, 0.05, 0.012, 0.05, 0, 4);
+        // stand-offs to the wall, with a plate
+        for (let y = -0.6; y < l.top - 0.2; y += 0.9) {
+          rod(sx, y, sz, sx - l.nx * 0.15, y, sz - l.nz * 0.15, 0.016);
+          b.box(sx - l.nx * 0.155, y, sz - l.nz * 0.155, Math.abs(tx) * 0.045 + Math.abs(l.nx) * 0.006, 0.045, Math.abs(tz) * 0.045 + Math.abs(l.nz) * 0.006, 0, 4);
+        }
+      }
+      for (let y = yb + 0.25; y < l.top - 0.05; y += 0.3) {
+        b.color(y < tide ? '#2c3a2b' : LADDER);
+        rod(ox - tx * 0.24, y, oz - tz * 0.24, ox + tx * 0.24, y, oz + tz * 0.24, 0.015);
+      }
+      continue;
+    }
     const tx = -l.nz,
       tz = l.nx; // along the wall
     const ox = l.x + l.nx * 0.16,
@@ -192,6 +253,7 @@ export function createRailings(
   }
   ball.dispose();
   spear.dispose();
+  tube8?.dispose();
   extra?.(b);
   const geo = b.build(true);
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.48, metalness: 0.35 });

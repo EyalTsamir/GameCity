@@ -11,7 +11,7 @@ import { shapeOn } from '../../core/sweepshape';
 import * as CK from '../vegetation/cropkit';
 import type { Rng } from '../../core/rng';
 import { Kit } from './furniture';
-import { cbox, lathe } from './shapes';
+import { cbox, lathe, smoothLathe, softBlob } from './shapes';
 
 const TAU = Math.PI * 2;
 
@@ -26,6 +26,27 @@ const PLAY = ['#e63946', '#f4a261', '#2a9d8f', '#457b9d', '#e9c46a', '#8d6cab'];
 function chair(k: Kit, frame: string, mat: 'wood' | 'plastic' | 'iron', cushion: string | null): void {
   const sh = k.sh;
   k.m(frame, mat);
+  if (shapeOn('shapegarden')) {
+    // legs that splay, back legs that run on up and rake back into the uprights, a seat with soft edges, a shaped top rail and a slat
+    for (const x of [-0.2, 0.2]) {
+      sh.tube(x * 1.08, 0, 0.21, x, 0.42, 0.17, 0.016, 0.019, 6);
+      sh.tube(x * 1.08, 0, -0.25, x, 0.42, -0.17, 0.016, 0.019, 6);
+      sh.tube(x, 0.42, -0.17, x * 0.96, 0.9, -0.25, 0.019, 0.015, 6);
+    }
+    if (mat === 'wood') for (let i = 0; i < 5; i++) cbox(sh, 0, 0.43, -0.17 + i * 0.087, 0.44, 0.022, 0.078, 0.005, 1);
+    else cbox(sh, 0, 0.43, 0, 0.45, 0.034, 0.43, 0.014, 1);
+    sh.box(0, 0.385, 0.17, 0.38, 0.05, 0.016, 0);
+    sh.box(0, 0.385, -0.17, 0.38, 0.05, 0.016, 0);
+    sh.push().local(0, 0.84, -0.238, -0.16);
+    cbox(sh, 0, 0, 0, 0.42, 0.1, 0.024, 0.01, 0);
+    sh.pop();
+    sh.push().local(0, 0.66, -0.208, -0.16).box(0, 0, 0, 0.39, 0.06, 0.016, 0).pop();
+    if (cushion) {
+      k.m(cushion, 'rubber');
+      softBlob(sh, 0, 0.47, 0.01, 0.2, 0.03, 0.19, 0.32, 0.6, 0.02, 11, 5, 10);
+    }
+    return;
+  }
   for (const x of [-0.2, 0.2]) {
     sh.box(x, 0.21, 0.17, 0.035, 0.42, 0.035, 1);
     sh.box(x, 0.46, -0.19, 0.035, 0.92, 0.035, 1);
@@ -48,7 +69,24 @@ export function tableSet(k: Kit, rng: Rng): void {
   const mat = style === 0 ? 'plastic' : style === 1 ? 'wood' : 'iron';
   const round = rng.chance(0.5);
   k.m(frame, mat);
-  if (round) {
+  const shaped = shapeOn('shapegarden');
+  if (round && shaped) {
+    // a turned pedestal on a spread foot, a top with a soft rim
+    smoothLathe(sh, 0, 0, [[0.27, 0.0], [0.27, 0.02], [0.14, 0.05], [0.045, 0.12], [0.032, 0.35], [0.038, 0.66], [0.09, 0.7]], 12);
+    smoothLathe(sh, 0, 0, [[0.47, 0.7], [0.5, 0.71], [0.505, 0.725], [0.495, 0.74], [0.0, 0.74]], 28);
+  } else if (shaped) {
+    for (const [x, z] of [
+      [-0.5, -0.36],
+      [0.5, -0.36],
+      [0.5, 0.36],
+      [-0.5, 0.36],
+    ])
+      sh.tube(x * 1.04, 0, z * 1.06, x, 0.7, z, 0.017, 0.024, 6);
+    for (const z of [-0.36, 0.36]) sh.box(0, 0.67, z, 1.0, 0.06, 0.018, 0);
+    for (const x of [-0.5, 0.5]) sh.box(x, 0.67, 0, 0.018, 0.06, 0.72, 0);
+    if (mat === 'wood') for (let i = 0; i < 6; i++) cbox(sh, 0, 0.73, -0.36 + i * 0.144, 1.2, 0.03, 0.134, 0.006, 1);
+    else cbox(sh, 0, 0.73, 0, 1.2, 0.036, 0.85, 0.014, 1);
+  } else if (round) {
     sh.cyl(0, 0, 0, 0.22, 0.05, 0.7, 6, 0);
     sh.cyl(0, 0.7, 0, 0.5, 0.5, 0.04, 12, 3);
   } else {
@@ -82,7 +120,7 @@ export function tableSet(k: Kit, rng: Rng): void {
   }
   // something on the table; a candle lantern on some (warm glow after dusk)
   k.m(rng.pick(['#e9e4d8', '#7aa0c8', '#d9473f']), 'ceramic');
-  sh.cyl(rng.range(-0.15, 0.15), round ? 0.74 : 0.75, rng.range(-0.1, 0.1), 0.08, 0.06, 0.12, 6, 2);
+  sh.cyl(rng.range(-0.15, 0.15), round ? 0.74 : 0.75, rng.range(-0.1, 0.1), 0.08, 0.06, 0.12, shaped ? 12 : 6, 2);
   if (rng.chance(0.55)) {
     const ty = round ? 0.74 : 0.75;
     k.m('#2c3033', 'iron');
@@ -134,6 +172,11 @@ export function parasol(k: Kit, rng: Rng, r = 1.3, h = 2.35, colors?: [string, s
     const me = sh.m.elements;
     k.s.setEx(2, me[12], me[13], me[14], 0.0065);
   }
+  if (shapeOn('shapegarden')) {
+    parasolShaped(k, r, h, c0, c1);
+    if (sway) k.s.setEx(2, 0, 0, 0, 0);
+    return;
+  }
   k.m('#3b3f42', 'iron');
   sh.cyl(0, 0, 0, 0.22, 0.2, 0.06, 8, 2);
   sh.cyl(0, 0.06, 0, 0.025, 0.025, h - 0.06, 5, 0);
@@ -178,6 +221,75 @@ export function parasol(k: Kit, rng: Rng, r = 1.3, h = 2.35, colors?: [string, s
   k.m('#3b3f42', 'iron');
   sh.cyl(0, top - 0.02, 0, 0.04, 0.02, 0.1, 5, 2);
   if (sway) k.s.setEx(2, 0, 0, 0, 0);
+}
+
+/** A parasol as it is made (?noshapegarden): cloth drawn in between eight ribs and belling down to the rim, ribs and stretchers on a runner under it, a scalloped valance, a turned base. */
+function parasolShaped(k: Kit, r: number, h: number, c0: string, c1: string): void {
+  const sh = k.sh,
+    s = k.s;
+  k.m('#3b3f42', 'iron');
+  smoothLathe(sh, 0, 0, [[0.23, 0], [0.23, 0.025], [0.19, 0.05], [0.06, 0.08], [0.034, 0.12]], 14);
+  sh.cyl(0, 0.08, 0, 0.022, 0.022, h - 0.08, 8, 0);
+  sh.cyl(0, h - 0.5, 0, 0.034, 0.034, 0.1, 8, 3);
+  const n = 8,
+    top = h + 0.32,
+    rim = h - 0.02,
+    sag = 0.065;
+  const P = (a: number, t: number, d: number): number[] => {
+    const rr = r * t * (1 - d * t);
+    return [Math.cos(a) * rr, top - (top - rim) * Math.pow(t, 1.7), Math.sin(a) * rr];
+  };
+  const V = (a: number, t: number, d: number): number => {
+    const p = P(a, t, d);
+    const sl = ((top - rim) * 1.7 * Math.pow(Math.max(t, 0.05), 0.7)) / r;
+    const l = Math.hypot(sl, 1);
+    return sh.v(p[0], p[1], p[2], (Math.cos(a) * sl) / l, 1 / l, (Math.sin(a) * sl) / l);
+  };
+  for (let i = 0; i < n; i++) {
+    const a0 = (i / n) * TAU,
+      a1 = ((i + 1) / n) * TAU,
+      am = (a0 + a1) / 2;
+    const col = i % 2 ? c1 : c0;
+    k.m(col, 'plastic');
+    for (const [aL, dL, aR, dR] of [
+      [a0, 0, am, sag],
+      [am, sag, a1, 0],
+    ]) {
+      const apex = V(0, 0.001, 0);
+      const A1 = V(aL, 0.55, dL),
+        B1 = V(aR, 0.55, dR),
+        A2 = V(aL, 1, dL),
+        B2 = V(aR, 1, dR);
+      s.tri(apex, B1, A1);
+      s.tri(B1, B2, A2);
+      s.tri(B1, A2, A1);
+      // the valance, its lower edge scalloped
+      const pL = P(aL, 1, dL),
+        pR = P(aR, 1, dR);
+      const nL = sh.v(pL[0], pL[1], pL[2], Math.cos(aL), 0, Math.sin(aL)),
+        nR = sh.v(pR[0], pR[1], pR[2], Math.cos(aR), 0, Math.sin(aR)),
+        bL = sh.v(pL[0], pL[1] - (dL ? 0.075 : 0.14), pL[2], Math.cos(aL), 0, Math.sin(aL)),
+        bR = sh.v(pR[0], pR[1] - (dR ? 0.075 : 0.14), pR[2], Math.cos(aR), 0, Math.sin(aR));
+      s.quad(nL, bL, bR, nR);
+    }
+    // the cloth from underneath
+    s.color(col);
+    s.r *= 0.55;
+    s.g *= 0.55;
+    s.b *= 0.55;
+    const ua = sh.v(0, top - 0.02, 0, 0, -1, 0),
+      ub = sh.v(Math.cos(a0) * r, rim - 0.02, Math.sin(a0) * r, 0, -1, 0),
+      uc = sh.v(Math.cos(a1) * r, rim - 0.02, Math.sin(a1) * r, 0, -1, 0);
+    s.tri(ua, ub, uc);
+    // rib, stretcher
+    k.m('#c7ccd0', 'steel');
+    const ca = Math.cos(a0),
+      sa = Math.sin(a0);
+    sh.tube(0, top - 0.04, 0, ca * r * 0.98, rim - 0.035, sa * r * 0.98, 0.007, 0.006, 3);
+    sh.tube(0, h - 0.42, 0, ca * r * 0.45, top - 0.04 - (top - rim) * 0.45, sa * r * 0.45, 0.006, 0.006, 3);
+  }
+  k.m('#3b3f42', 'iron');
+  sh.cyl(0, top - 0.02, 0, 0.04, 0.012, 0.1, 8, 2);
 }
 
 /** Kettle BBQ or a small gas grill. */
@@ -568,6 +680,38 @@ export function paddling(k: Kit, rng: Rng, dia: number): void {
   const sh = k.sh;
   const R = dia / 2 - 0.1;
   const c = rng.pick(['#2f7fb8', '#2a9d8f', '#e86a8a', '#e8a33c']);
+  if (shapeOn('shapegarden')) {
+    // blown up: three fat rings, stacked, a little squashed, with a valve; water in it and a rubber duck on the water
+    const ring = (y: number, rr: number, a0: number, a1: number): number[][] => {
+      const out: number[][] = [];
+      const steps = Math.round((a1 - a0) / 0.62);
+      for (let i = 0; i <= steps; i++) {
+        const a = a0 + ((a1 - a0) * i) / steps;
+        out.push([R - rr + Math.cos(a) * rr, y + Math.sin(a) * rr * 0.92]);
+      }
+      return out;
+    };
+    k.m(c, 'plastic');
+    smoothLathe(sh, 0, 0, ring(0.065, 0.07, -1.57, 1.57), 22);
+    k.m('#f4efe4', 'plastic');
+    smoothLathe(sh, 0, 0, ring(0.18, 0.07, -1.57, 1.57), 22);
+    k.m(c, 'plastic');
+    smoothLathe(sh, 0, 0, ring(0.295, 0.075, -1.57, 3.6), 22);
+    k.m('#f4efe4', 'plastic');
+    sh.push().local(R + 0.002, 0.3, 0, 0, 0, Math.PI / 2).cyl(0, -0.02, 0, 0.012, 0.012, 0.03, 6, 3).pop();
+    k.m(WATER_EDGE, 'glass');
+    sh.disc(0, 0.25, 0, R - 0.1, 22, 1);
+    // the duck
+    const dx = R * 0.3,
+      dz = -R * 0.2;
+    k.m('#f2cf3a', 'plastic');
+    sh.ellipsoid(dx, 0.27, dz, 0.075, 0.05, 0.1, 0);
+    sh.ellipsoid(dx, 0.34, dz + 0.055, 0.042, 0.042, 0.042, 0);
+    sh.push().local(dx, 0.285, dz - 0.09, 0.6, 0, 0).cyl(0, 0, 0, 0.022, 0.004, 0.05, 6, 0).pop();
+    k.m('#e8732c', 'plastic');
+    sh.ellipsoid(dx, 0.335, dz + 0.1, 0.018, 0.008, 0.016, 0);
+    return;
+  }
   k.m(c, 'plastic');
   sh.cyl(0, 0, 0, R, R, 0.14, 14, 0);
   k.m('#f4efe4', 'plastic');
@@ -713,6 +857,21 @@ export function vegBeds(k: Kit, rng: Rng, n: number, d: number): void {
 /** Compost: a slatted timber bay or a green plastic "dalek" bin. */
 export function compost(k: Kit, rng: Rng): void {
   const sh = k.sh;
+  if (shapeOn('shapegarden') && rng.chance(0.5)) {
+    // moulded "dalek" bins: ribbed walls, a hatch at the foot, a domed lid with a grip
+    const dalek = (x: number, z: number, k0: number): void => {
+      k.m('#2f4a35', 'plastic');
+      lathe(sh, x, z, [[0.42 * k0, 0], [0.41 * k0, 0.18], [0.392 * k0, 0.2], [0.385 * k0, 0.4], [0.367 * k0, 0.42], [0.36 * k0, 0.62], [0.342 * k0, 0.64], [0.335 * k0, 0.85]], 14);
+      k.m('#29402f', 'plastic');
+      smoothLathe(sh, x, z, [[0.36 * k0, 0.85], [0.36 * k0, 0.885], [0.3 * k0, 0.93], [0.13 * k0, 0.965], [0, 0.97]], 14);
+      cbox(sh, x, 0.985, z, 0.14 * k0, 0.03, 0.03, 0.008, 1);
+      cbox(sh, x, 0.15, z + 0.39 * k0, 0.3 * k0, 0.24, 0.03, 0.01, 0);
+      cbox(sh, x, 0.21, z + 0.41 * k0, 0.1, 0.022, 0.02, 0.005, 0);
+    };
+    dalek(0, 0, 1);
+    if (rng.chance(0.6)) dalek(0.62, 0.1, 0.92);
+    return;
+  }
   if (rng.chance(0.5)) {
     k.m('#2f4a35', 'plastic');
     sh.cyl(0, 0, 0, 0.42, 0.33, 0.85, 8, 0);
@@ -769,6 +928,25 @@ function wheelieBin(k: Kit, rng: Rng, c: string): void {
   k.m('#1e2022', 'rubber');
   for (const x of [-0.25, 0.25]) sh.push().local(x, 0.11, -0.3, 0, 0, Math.PI / 2).cyl(0, -0.03, 0, 0.11, 0.11, 0.06, 10, 3).pop();
   sh.tube(-0.25, 0.11, -0.3, 0.25, 0.11, -0.3, 0.012, 0.012, 4);
+  if (shapeOn('shapegarden')) {
+    // what a moulded lid has: a raised panel, a grip along the front, hinge knuckles; ribs down the body
+    sh.push().local(0, 0.99, -0.3, -ajar);
+    k.m(c, 'plastic');
+    k.s.r *= 0.9;
+    k.s.g *= 0.9;
+    k.s.b *= 0.9;
+    cbox(sh, 0, 0.041, 0.31, 0.5, 0.016, 0.52, 0.008, 1);
+    cbox(sh, 0, 0.052, 0.595, 0.34, 0.012, 0.03, 0.005, 1);
+    sh.pop();
+    k.m(c, 'plastic');
+    for (const x of [-0.17, 0, 0.17]) {
+      sh.push().local(x, 0.985, -0.315, 0, 0, Math.PI / 2).cyl(0, -0.03, 0, 0.016, 0.016, 0.06, 6, 3).pop();
+      sh.beam(x, 0.2, 0.235, x, 0.8, 0.27, 0.03, 0.012);
+    }
+    for (const s of [-1, 1]) for (const z of [-0.1, 0.1]) sh.beam(s * 0.235, 0.2, z, s * 0.27, 0.8, z, 0.012, 0.03);
+    k.m('#8f949a', 'steel');
+    for (const x of [-0.25, 0.25]) sh.push().local(x, 0.11, -0.3, 0, 0, Math.PI / 2).cyl(0, x > 0 ? 0.03 : -0.034, 0, 0.05, 0.05, 0.004, 8, x > 0 ? 2 : 1).pop();
+  }
   // front lifting comb (a dark moulded bar under the rim) and the number label
   k.m(c, 'plastic');
   cbox(sh, 0, 0.84, 0.275, 0.42, 0.06, 0.04, 0.01);
@@ -805,6 +983,31 @@ export function loungers(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const frame = rng.pick(['#f2f0ea', '#8a5b3a', '#3a3f44']);
   const cush = rng.pick(CUSHION);
+  if (shapeOn('shapegarden')) {
+    // a frame of rails on round legs and two wheels, a back on a strut, a thick cushion in sections with piped seams
+    const wood = frame === '#8a5b3a';
+    for (const x of [-0.55, 0.55]) {
+      sh.push().local(x, 0, 0, 0, rng.range(-0.1, 0.1));
+      k.m(frame, wood ? 'wood' : 'plastic');
+      for (const s of [-1, 1]) cbox(sh, s * 0.29, 0.21, 0.2, 0.04, 0.05, 1.32, 0.012, 1);
+      for (const z of [-0.42, 0.2, 0.84]) sh.box(0, 0.21, z, 0.58, 0.04, 0.03, 0);
+      for (const s of [-1, 1]) sh.tube(s * 0.29, 0, 0.78, s * 0.29, 0.2, 0.78, 0.02, 0.018, 6);
+      sh.push().local(0, 0.24, -0.44, 0.72, 0, 0);
+      for (const s of [-1, 1]) cbox(sh, s * 0.29, 0, -0.32, 0.04, 0.04, 0.68, 0.012, 1);
+      sh.box(0, 0, -0.63, 0.58, 0.036, 0.03, 0);
+      k.m(cush, 'rubber');
+      softBlob(sh, 0, 0.05, -0.32, 0.27, 0.045, 0.33, 0.3, 0.6, 0.012, 3, 5, 10);
+      sh.pop();
+      k.m('#2c2e30', 'rubber');
+      for (const s of [-1, 1]) sh.push().local(s * 0.31, 0.09, -0.36, 0, 0, Math.PI / 2).cyl(0, -0.016, 0, 0.09, 0.09, 0.032, 12, 3).pop();
+      k.m(cush, 'rubber');
+      for (const z of [-0.2, 0.33, 0.73]) softBlob(sh, 0, 0.27, z, 0.27, 0.045, z === 0.33 ? 0.24 : z < 0 ? 0.26 : 0.15, 0.3, 0.6, 0.012, Math.round(z * 90) + 40, 5, 10);
+      sh.pop();
+    }
+    k.m(frame, wood ? 'wood' : 'plastic');
+    smoothLathe(sh, 0, 0.8, [[0.18, 0], [0.18, 0.02], [0.045, 0.05], [0.03, 0.2], [0.04, 0.37], [0.2, 0.38], [0.205, 0.395], [0.19, 0.41], [0, 0.41]], 14);
+    return;
+  }
   for (const x of [-0.55, 0.55]) {
     sh.push().local(x, 0, 0, 0, rng.range(-0.1, 0.1));
     k.m(frame, frame === '#8a5b3a' ? 'wood' : 'plastic');

@@ -136,6 +136,32 @@ export function lathe(sh: Shaper, cx: number, cz: number, prof: number[][], side
   }
 }
 
+/** like lathe, but the normals run smooth from one ring of the profile to the next */
+export function smoothLathe(sh: Shaper, cx: number, cz: number, prof: number[][], sides: number, rot = 0): void {
+  const s = sh.s;
+  const n: number[][] = [];
+  for (let p = 0; p < prof.length; p++) {
+    const a = prof[Math.max(0, p - 1)],
+      b = prof[Math.min(prof.length - 1, p + 1)];
+    const dr = b[0] - a[0],
+      dy = b[1] - a[1];
+    const l = Math.hypot(dr, dy) || 1;
+    n.push([dy / l, -dr / l]);
+  }
+  const ids: number[][] = [];
+  for (let p = 0; p < prof.length; p++) {
+    const row: number[] = [];
+    for (let i = 0; i <= sides; i++) {
+      const t = rot + (i / sides) * Math.PI * 2;
+      const co = Math.cos(t),
+        sn = Math.sin(t);
+      row.push(sh.v(cx + co * prof[p][0], prof[p][1], cz + sn * prof[p][0], co * n[p][0], n[p][1], sn * n[p][0]));
+    }
+    ids.push(row);
+  }
+  for (let p = 0; p + 1 < prof.length; p++) for (let i = 0; i < sides; i++) s.quad(ids[p][i], ids[p + 1][i], ids[p + 1][i + 1], ids[p][i + 1]);
+}
+
 /** hexagonal bolt head / nut on a face: centre (x,y,z) in the local frame, facing local +Z */
 export function boltZ(sh: Shaper, x: number, y: number, z: number, r: number): void {
   sh.push().local(x, y, z, Math.PI / 2, 0, 0);

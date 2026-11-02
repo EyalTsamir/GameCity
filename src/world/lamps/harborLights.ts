@@ -5,6 +5,7 @@
 // are washed in cool white light (night palette #d6e6ff) multiplied by their own colours.
 // The crane work lights under the booms are moving spot lights (see harbor/material.ts).
 
+import { shapeOn } from '../../core/sweepshape';
 import type { OccupancyGrid } from '../../core/occupancy';
 import { OCC } from '../../core/occupancy';
 import { addLampLights, type LampLight } from '../../core/lampLight';
@@ -60,7 +61,25 @@ export function buildHarborFloodlights(b: HB, ground: (x: number, z: number) => 
     b.color('#9a978f');
     b.vcyl(m.x, g, m.z, 0.62, 0.45, 8, 2);
     b.color(STEEL);
-    b.vcyl(m.x, g + 0.45, m.z, 0.3, m.height - 0.95, 8, 0, 0.17);
+    if (shapeOn('shapemast')) {
+      // three spun sections slipped into one another, each with its collar; a door at head height; the foot on a bolted flange
+      const H0 = g + 0.45,
+        LL = m.height - 0.95;
+      b.vcyl(m.x, H0, m.z, 0.3, LL, 20, 0, 0.17);
+      b.vcyl(m.x, H0, m.z, 0.4, 0.04, 20, 3);
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        b.vcyl(m.x + Math.cos(a) * 0.35, H0 + 0.04, m.z + Math.sin(a) * 0.35, 0.022, 0.03, 6, 2);
+      }
+      for (const t of [0.34, 0.67]) {
+        const rr = 0.3 + (0.17 - 0.3) * t + 0.012;
+        b.vcyl(m.x, H0 + LL * t - 0.09, m.z, rr + 0.004, 0.18, 20, 3, rr);
+      }
+      b.color(DARK);
+      b.box(m.x, H0 + 1.05, m.z + 0.293, 0.17, 0.42, 0.012, 0, 0);
+      b.color(STEEL);
+      b.box(m.x, H0 + 1.05, m.z + 0.298, 0.15, 0.4, 0.008, 0, 0);
+    } else b.vcyl(m.x, g + 0.45, m.z, 0.3, m.height - 0.95, 8, 0, 0.17);
     b.color(DARK);
     b.vcyl(m.x, top - 0.55, m.z, 0.85, 0.08, 10, 3);
     // average aim direction: the head frame faces it
