@@ -20,6 +20,10 @@ const SOFTLINE = sweepPeople('softline');
 const HF_LIFT = sweepPeople('hairfall') ? '1.0' : '0.0';
 const FE0 = sweepPeople('hairfall') ? '0.66' : '0.98';
 const SEAMH = sweepPeople('seamdots') ? '0.0004' : '0.0014';
+const GRIPS = sweepPeople('grips');
+const PROPP = sweepPeople('propprint');
+const GRAIN0 = sweepPeople('seamdots') ? '0.07' : '0.25';
+const GRAIN1 = sweepPeople('seamdots') ? '0.18' : '0.6';
 const HC = sweepPeople('hatcloth') ? 'true' : 'false';
 const VS_BRIM = sweepPeople('hatform') ? "{\n        // no hat brim is a flat disc: straw and cotton wander (every hat its own way), a fedora snaps down in front and rolls up at the sides, a hard hat's peak is at the front only\n        float wv = sin(phi * 2.0 + float(h3 & 63u) * 0.1) + 0.6 * sin(phi * 3.0 + float((h3 >> 6u) & 63u) * 0.1);\n        if (st == 3u || st == 7u) p.y += s * s * 0.007 * wv;\n        else if (st == 4u) p.y += s * s * (0.016 * sin(phi) * sin(phi) - 0.012 * cos(phi) + 0.004 * wv);\n        else if (st == 5u) p.xz -= rad * s * hb.x * 0.72 * (1.0 - smoothstep(0.1, 1.0, cos(phi)));\n      }" : '';
 const VS_CROWN = sweepPeople('hatform') ? "{\n        // the crown's own form: a fedora's pinch and dents, a hard hat's ridge, a beanie's turned-up cuff\n        float xn = p.x;\n        if (st == 4u) p.y -= top * top * (0.016 * exp(-xn * xn / 0.0006) + 0.006 * exp(-(abs(xn) - 0.04) * (abs(xn) - 0.04) / 0.0003) * smoothstep(-0.02, 0.05, p.z));\n        else if (st == 5u) p.y += 0.0035 * exp(-xn * xn / 0.00012) * smoothstep(0.1, 0.5, s);\n        else if (st == 6u) p.xz += rad * 0.0035 * (1.0 - smoothstep(0.26, 0.3, s));\n      }" : '';
@@ -683,6 +687,13 @@ void pedPose(inout vec3 p, inout vec3 n) {
 //@endif
     }
   }
+//@if CL
+  ${PROPP ? `
+  vPedHatSt = region == ${R.HAT} ? vPedHatSt : 0.0;
+  if (region == ${R.WHITE} && ((d0 >> 10u) & 63u) == ${FB.NEWSPAPER + 1}u) { vPedHatSt = 10.0; vPedFace = vec3(aux.x, aux.y, 0.015); }
+  else if (region == ${R.BAG} && ((d0 >> 10u) & 63u) == ${FB.SHOPBAG + 1}u) { vec3 gB = mix(pedPivS(${PIV.WRIST}, false), pedPivS(${PIV.TIP}, false), 0.42); vPedHatSt = 11.0; vPedFace = vec3(p.z - gB.z, p.y - gB.y, 0.015); }
+  ` : `if (region != ${R.HAT}) vPedHatSt = 0.0;`}
+//@endif
   if (bone == ${B.TAIL}) {
     float u = aux.x;
     vec3 hip = pedPiv(${PIV.HIP});
@@ -772,11 +783,74 @@ void pedPose(inout vec3 p, inout vec3 n) {
     vec3 kn = mix(wr, tp, 0.5);
     float g = (left ? P_gripL : P_gripR) * 1.35;
     float z0 = 1.0 - aux.x;
+//@if CL
+    ${GRIPS ? `
+    // fingers bend along their length round what they hold, a rigid turn about the knuckles left them hooks beside it. Each thing its own hold:
+    // a cup fills the hand, a phone lies along the fingers, a sheet of newspaper is held between finger and thumb.
+    {
+      vec3 ax = normalize(tp - wr);
+      vec3 pl = vec3(left ? -1.0 : 1.0, 0.0, 0.0);
+      pl = normalize(pl - ax * dot(pl, ax));
+      float gg = (left ? P_gripL : P_gripR) * 2.75;
+      if (!left && (iC2.z & ${1 << FB.CUP}u) != 0u) gg = 2.3;
+      if (!left && (iC2.z & ${1 << FB.PHONE}u) != 0u) gg = 0.85;
+      if ((iC2.z & ${1 << FB.NEWSPAPER}u) != 0u) gg = 0.8;
+      vec3 o = p - kn;
+      float u = dot(o, ax), v = dot(o, pl);
+      if (u > 0.0 && gg > 0.01) {
+        float rho = length(tp - kn) / gg;
+        float th = u / rho;
+        float c = cos(th), s = sin(th);
+        vec3 lat = o - u * ax - v * pl;
+        p = kn + ax * (rho * s - v * s) + pl * (rho * (1.0 - c) + v * c) + lat;
+        float nu = dot(n, ax), nv = dot(n, pl);
+        vec3 nl = n - nu * ax - nv * pl;
+        n = ax * (nu * c - nv * s) + pl * (nu * s + nv * c) + nl;
+      }
+    }
+    ` : 'pedJoint(p, n, pedRZ(left ? -g : g), kn, z0);'}
+//@else
     pedJoint(p, n, pedRZ(left ? -g : g), kn, z0);
+//@endif
   }
+//@if CL
+  ${GRIPS ? `
+  // the thumb comes round to meet the fingers
+  if ((bone == ${B.HAND_L} || bone == ${B.HAND_R}) && aux.x < 0.0) {
+    bool left = bone == ${B.HAND_L};
+    vec3 wr = pedPivS(${PIV.WRIST}, left), tp = pedPivS(${PIV.TIP}, left);
+    float gg = (left ? P_gripL : P_gripR);
+    if (!left && (iC2.z & ${1 << FB.CUP}u) != 0u) gg = 0.72;
+    if (!left && (iC2.z & ${1 << FB.PHONE}u) != 0u) gg = 0.5;
+    if ((iC2.z & ${1 << FB.NEWSPAPER}u) != 0u) gg = 0.75;
+    float th = gg * 1.25 * (left ? -1.0 : 1.0);
+    vec3 tb = mix(wr, tp, 0.14) + vec3(0.0, 0.0, 0.03);
+    float tw = 1.0 + aux.x, tc = cos(th), ts = sin(th);
+    pedJoint(p, n, mat3(tc, 0.0, -ts, 0.0, 1.0, 0.0, ts, 0.0, tc) * pedRX(-gg * 0.45), tb, tw);
+  }
+  ` : ''}
+//@endif
 //@endif
 
   // ── forward kinematics
+//@if CL
+  ${GRIPS ? `
+  if (bone == ${B.HAND_R} && ((d0 >> 10u) & 63u) == ${FB.CUP + 1}u) {
+    // a cup stays level whatever the wrist does; it sits where the fingers close (its mesh is built round cup0)
+    vec3 wr0 = pedPivS(${PIV.WRIST}, false), tp0 = pedPivS(${PIV.TIP}, false);
+    vec3 g00 = mix(wr0, tp0, 0.42);
+    vec3 cup0 = g00 + vec3(0.03, 0.015, 0.012);
+    vec3 ax0 = normalize(tp0 - wr0);
+    vec3 at0 = mix(wr0, tp0, 0.56) + normalize(vec3(1.0, 0.0, 0.0) - ax0 * ax0.x) * 0.04 + vec3(0.0, 0.0, 0.004);
+//@if PAL
+    vec3 cup1 = pedPalPoint(at0, ${B.HAND_R});
+//@else
+    vec3 cup1 = pedCarry(at0, ${B.HAND_R});
+//@endif
+    p = cup1 + (p - cup0);
+  } else
+  ` : ''}
+//@endif
   if (bone == ${B.BAG_L} || bone == ${B.BAG_R} || bone == ${B.UMB} || bone == ${B.CANE}) {
     bool left = bone == ${B.BAG_L};
     vec3 g0 = mix(pedPivS(${PIV.WRIST}, left), pedPivS(${PIV.TIP}, left), 0.42);
@@ -1081,6 +1155,54 @@ float pedCurl(vec2 q) {
   q += 0.7 * sin(q.yx * 0.73 + 1.1);
   return sin(q.x) * sin(q.y) * 0.75 + 0.25 * sin(q.x * 2.3 + 1.3 * sin(q.y * 1.7)) * sin(q.y * 2.1);
 }
+// a newspaper (vPedFace.xy: across the sheet -1…1, down it 0 foot … 1 head): a masthead, a headline, columns of text, a photograph
+vec3 pedPaper(vec3 pc, vec2 uv) {
+  float u = abs(uv.x), v = uv.y;
+  float px = max(fwidth(v), 1e-5);
+  float det = 1.0 - smoothstep(0.012, 0.03, px);
+  float side = uv.x < 0.0 ? 0.0 : 1.0;
+  float cu = (u - 0.04) / 0.92 * 5.0;
+  float col = floor(cu);
+  float inCol = step(0.0, cu) * step(cu, 5.0) * step(0.1, fract(cu)) * step(fract(cu), 0.92);
+  float lines = 1.0 - smoothstep(0.18, 0.5, abs(fract(v * 58.0) - 0.5));
+  float words = 0.45 + 0.55 * step(0.25, fract(cu * 3.1 + floor(v * 58.0) * 0.37 + side * 0.31));
+  float inkTone = mix(0.28, 0.22 * 0.5 + 0.28, smoothstep(0.1, 0.4, px * 58.0));
+  float body = inCol * step(0.06, v) * step(v, 0.8);
+  vec3 c = pc;
+  c = mix(c, pc * (1.0 - inkTone), body * lines * words * (1.0 - smoothstep(0.25, 0.55, px * 58.0)));
+  c = mix(c, pc * (1.0 - inkTone * 0.45), body * smoothstep(0.25, 0.55, px * 58.0));
+  // the head of the page: a heavy masthead on one, a headline on the other
+  float mh = step(0.83, v) * step(v, 0.95) * step(0.05, u) * step(u, 0.95);
+  float hl = 1.0 - smoothstep(0.3, 0.4, abs(fract(v * 9.0) - 0.5) * 2.0 - 0.1);
+  float bl = step(0.3, fract(cu * 1.6 + side * 0.43));
+  c = mix(c, pc * 0.16, mh * bl * mix(1.0, hl, side));
+  // a photograph, a rule between the columns
+  float ph = step(0.44, v) * step(v, 0.76) * step(0.08 + 0.4 * side, u) * step(u, 0.52 + 0.4 * side);
+  float g = 0.4 + 0.3 * sin(v * 26.0 + u * 11.0 + side * 3.0) * sin(u * 19.0 + 1.0);
+  c = mix(c, pc * g, ph);
+  // the fold down the middle
+  c *= 1.0 - 0.28 * (1.0 - smoothstep(0.0, 0.012, u));
+  return mix(pc * 0.86, c, det);
+}
+// a paper carrier bag (vPedFace.xy: z and height in the figure's rest frame): a turned-over top, a crease down each face, a printed mark; every bag its own
+vec3 pedCarrier(vec3 pc, vec2 q, vec3 r) {
+  float h0 = fract(dot(vPedHairW.rgb, vec3(3.3, 7.1, 2.2)) + float(vPedFC.y & 255u) / 255.0);
+  // (x > 0 long faces): only on the long faces is there a print
+  vec3 rn = normalize(vPedRN);
+  float face = smoothstep(0.5, 0.8, abs(rn.x));
+  vec2 m = vec2(q.x - 0.005, q.y + 0.27 * vPedHgt / 1.76);
+  float d = h0 < 0.34 ? abs(length(m) - 0.042) - 0.006 : h0 < 0.67 ? max(abs(m.x) - 0.055, abs(m.y) - 0.012) : max(abs(m.x) + abs(m.y) - 0.05, -(abs(m.x) + abs(m.y) - 0.028));
+  float px = max(fwidth(q.y), 1e-5);
+  float mk = (1.0 - smoothstep(-px, px, d)) * face;
+  vec3 lt = dot(pc, vec3(0.33)) > 0.35 ? pc * 0.35 : mix(pc, vec3(0.78, 0.76, 0.7), 0.82);
+  pc = mix(pc, lt, mk * 0.9);
+  // creases of a bag that has been folded flat: down the middle of the gusset, across near the bottom
+  pc *= 1.0 - 0.07 * (1.0 - smoothstep(0.0, 0.006, abs(m.y + 0.09)));
+  pc *= 1.0 - 0.1 * (1.0 - face) * (1.0 - smoothstep(0.0, 0.25, abs(rn.z - 0.0) + 0.0));
+  pedFabH = 0.0005 * sin(q.x * 90.0 + q.y * 31.0) * sin(q.y * 41.0);
+  pedFabK = 0.4;
+  return pc;
+}
 // what a hat is made of. vPedFace: x = s along the dome or the brim, y = 0 dome, 1 brim, 2 visor
 vec3 pedHat(vec3 pc) {
   uint st = uint(vPedHatSt + 0.5);
@@ -1271,7 +1393,8 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
   float wvA = denim ? gA : knit ? tA * 0.75 : r.y * 2600.0;
   // (derivative bump needs ≥ 5–6 px per ripple: nearer the pixel size its 2×2 derivatives read as a dot grid)
   float wvK = 1.0 - smoothstep(0.1, 0.2, fwidth(wvA) / 6.2832);
-  float grain = 1.0 + (denim ? 0.07 : 0.035) * (pedN1(gA) - 0.5) * (1.0 - smoothstep(0.25, 0.6, fwidth(gA)));
+  // (a soft grain that only shows where each ridge has pixels of its own: the old limit left it to beat against the pixels, as rippling bands across a shirt)
+  float grain = 1.0 + (denim ? 0.07 : 0.035) * (pedN1(gA) - 0.5) * (1.0 - smoothstep(${GRAIN0}, ${GRAIN1}, fwidth(gA)));
   float bend = vPedBend;
   float fold = 0.0; // fold relief height (m)
   if (reg > 2.5 && reg < 3.5) {
@@ -1997,6 +2120,8 @@ const FRAG_COLOR = /* glsl */ `
     else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) pc *= pedStrands(vPedRest);
 #ifdef PED_CLOSE
     else if (${HC} && abs(vPedReg - ${R.HAT}.0) < 0.5) pc = pedHat(pc);
+    else if (vPedHatSt > 9.5 && vPedHatSt < 10.5) pc = pedPaper(pc, vPedFace.xy);
+    else if (vPedHatSt > 10.5) pc = pedCarrier(pc, vPedFace.xy, vPedRest);
 #endif
     else if (vPedReg > 0.5 && vPedReg < 3.5 || abs(vPedReg - ${R.OUTER}.0) < 0.5 || abs(vPedReg - ${R.TAIL}.0) < 0.5) {
 #ifdef PED_CLOSE

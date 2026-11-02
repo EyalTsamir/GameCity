@@ -10,6 +10,7 @@
 //   rootX/Y/Z  offsets in figure units (applied before the instance scale)
 
 import { POSE_KEYS, type PoseKey } from './shader';
+import { sweepPeople } from '../../core/sweepPeople';
 import type { Rig, V3 } from './rig';
 import { BONE } from './body';
 
@@ -353,6 +354,7 @@ export function legIKa(r: Rig, o: LegSolve): LegSolve {
 
 // ──────────────────────────────────────────────────────────────── arm IK ──
 
+const GRIP_STANDOFF = sweepPeople('grips') ? 0.024 : 0;
 export interface ArmSolve {
   flex: number;
   abd: number;
@@ -450,7 +452,8 @@ const PT = newPose();
 /** grip point of an arm solution in the chest rest frame */
 function armGrip(r: Rig, left: boolean, o: ArmSolve, out: V3): V3 {
   const s = left ? 1 : -1;
-  out.x = (r.wrist.x + (r.tip.x - r.wrist.x) * 0.42) * s;
+  // (what's gripped runs through the closing fingers, in front of the palm: a target at the palm's centre put bars and handles inside the hand)
+  out.x = (r.wrist.x + (r.tip.x - r.wrist.x) * 0.42) * s - s * GRIP_STANDOFF;
   out.y = r.wrist.y + (r.tip.y - r.wrist.y) * 0.42;
   out.z = r.wrist.z + (r.tip.z - r.wrist.z) * 0.42;
   if (left) {

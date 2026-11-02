@@ -4,6 +4,7 @@
 // IK (pose.ts armIK). Writes a Pose (pose.ts).
 
 import type { Member } from './crowd';
+import { sweepPeople } from '../../core/sweepPeople';
 import { detailPeople } from '../../core/detailPeople';
 import { F } from './figure';
 import { gaitIn, gaitPose, newGaitOut, type GaitState, type IdleShift } from './gait';
@@ -23,6 +24,8 @@ export const BACKREST_Z = -0.3;
  * café patron's drink is in the hand (no figure prop: the renderer takes it off the table) */
 export const PROP = { NONE: 0, PHONE: 1, CUP: 2, PAPER: 3, GLASS: 4 } as const;
 
+// (thumb up, palm towards the body: the fingers go round a cup standing upright)
+const CUP_PALM_Y = sweepPeople('grips') ? -0.1 : -0.8;
 const leg: LegSolve = { flex: 0.5, knee: 0.5, ankle: 0.5, reached: true };
 const G = newGaitOut();
 const idle: IdleShift = { sway: 0.5, roll: 0.5, yaw: 0.5, drop: 0.5 };
@@ -684,7 +687,7 @@ export function computePoseA(m: Member, umbrella: boolean, r: Rig, o: Pose, gs: 
       RT[1] = wy + 0.1 * hk + (r.head.y - wy - 0.1 * hk) * u;
       RT[2] = 0.2 * hk + (r.head.z + 0.12 * hk - 0.2 * hk) * u;
       RT[3] = 1;
-      reach(r, armR, false, -1, -0.8, -0.3, 0.85);
+      reach(r, armR, false, -1, CUP_PALM_Y, -0.3, 0.85);
       headPitch -= 0.1 * u;
       prop = PROP.CUP;
     } else {

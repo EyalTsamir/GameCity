@@ -1239,13 +1239,13 @@ function buildFingers(
     for (let k = 0; k < TS; k++) {
       const phi = (k / TS) * Math.PI * 2;
       b.use(HA, REG.SKIN, -1, s >= 3 && Math.sin(phi) * side > 0.4 ? 1.1 : 0.97);
-      ids.push(b.v(add(c, add(mul(U, tr * rr * Math.sin(phi)), mul(V, tr * rr * 0.9 * Math.cos(phi)))), -0.3, 0));
+      ids.push(b.v(add(c, add(mul(U, tr * rr * Math.sin(phi)), mul(V, tr * rr * 0.9 * Math.cos(phi)))), -0.3, 0, s === 0 ? -0.15 : s === 1 ? -0.5 : -1));
     }
     rings.push({ ids, c });
   }
   bridge(b, rings);
   const tc = rings[rings.length - 1].c;
-  capFan(b, rings[rings.length - 1], b.v(add(tc, mul(dir, tr * 0.7)), -0.4, 0), sub(tc, mul(dir, 0.01)));
+  capFan(b, rings[rings.length - 1], b.v(add(tc, mul(dir, tr * 0.7)), -0.4, 0, -1), sub(tc, mul(dir, 0.01)));
 }
 
 function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
@@ -2138,7 +2138,8 @@ function softBox(b: MeshBuilder, c: P3, size: P3, h = 0, w = 0, a1 = 0, a2 = 0):
 /** close level: a paper shopping bag (bulging sides, open top with a rolled rim and an inside, goods
  *  showing, two rope handles up to the grip) hanging from the grip point g (BAG_R bone) */
 function shoppingBag(b: MeshBuilder, g: P3, hk: number): void {
-  const c: P3 = add(g, [-0.012, -0.16 * hk, 0.005]);
+  const longHandles = sweepPeople('grips');
+  const c: P3 = add(g, [longHandles ? 0.012 : -0.012, -0.16 * hk - (longHandles ? 0.11 * hk : 0), 0.005]);
   const hx = 0.05 * hk,
     hy = 0.13 * hk,
     hz = 0.11 * hk;
@@ -2185,6 +2186,19 @@ function shoppingBag(b: MeshBuilder, g: P3, hk: number): void {
   blob(b, [c[0] + 0.004, c[1] + hy * 0.9, c[2] + hz * 0.35], [hx * 0.75, 0.045 * hk, hz * 0.4], 8, 4);
   // rope handles from the middle of each long rim edge to the grip
   b.use(BONE.BAG_R, REG.STRAP, FB.SHOPBAG, 0.8);
+  if (longHandles) {
+    // two loops of cord, one on each long side, drawn up to the closed hand
+    const tip: P3 = add(g, [0.022, -0.012, 0.004]);
+    for (const sx of [1, -1])
+      for (const sz of [1, -1]) {
+        const a: P3 = [c[0] + sx * hx * 0.92, c[1] + hy - 0.003, c[2] + sz * hz * 0.42];
+        const mid: P3 = add(lerp3(a, tip, 0.45), [sx * 0.008, 0, sz * 0.012]);
+        const t2: P3 = add(tip, [sx * 0.002, 0, sz * 0.008]);
+        stick(b, a, mid, 0.0028, 4);
+        stick(b, mid, t2, 0.0028, 4);
+      }
+    return;
+  }
   for (const s of [1, -1]) {
     const a0: P3 = [c[0], c[1] + hy, c[2] + s * hz * 0.35],
       a1: P3 = [c[0], c[1] + hy, c[2] - s * hz * 0.05];
@@ -2474,17 +2488,35 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   if (!far) {
     b.use(BONE.BAG_L, REG.BAG, FB.BRIEFCASE, 1);
     const g = grip(1);
-    softBox(b, add(g, [0.008, -0.15 * hk, 0.01]), [0.075 * hk, 0.26 * hk, 0.36 * hk]);
+    const caseDrop = cfg.close && sweepPeople('grips') ? 0.05 * hk : 0;
+    softBox(b, add(g, [0.008, -0.15 * hk - caseDrop, 0.01]), [0.075 * hk, 0.26 * hk, 0.36 * hk]);
     if (all) {
       b.use(BONE.BAG_L, REG.DARK, FB.BRIEFCASE, 1);
       if (cfg.close) {
         // an arched handle on two lugs, a seam round the lid and two catches
-        const yT = -0.02 * hk - 0.03 * hk;
-        stick(b, add(g, [0.008, yT, -0.045 * hk]), add(g, [0.008, -0.012 * hk, -0.035 * hk]), 0.006);
-        stick(b, add(g, [0.008, -0.012 * hk, -0.035 * hk]), add(g, [0.008, -0.004 * hk, 0.0]), 0.006);
-        stick(b, add(g, [0.008, -0.004 * hk, 0.0]), add(g, [0.008, -0.012 * hk, 0.045 * hk]), 0.006);
-        stick(b, add(g, [0.008, -0.012 * hk, 0.045 * hk]), add(g, [0.008, yT, 0.055 * hk]), 0.006);
-        const yl = -0.15 * hk + 0.13 * hk - 0.035 * hk;
+        const yT = -0.02 * hk - 0.03 * hk - caseDrop;
+        if (caseDrop > 0) {
+          // (a smooth bail, running through the closed fingers: the old one sat in the palm's thickness, under the hand)
+          const hx = -0.02;
+          const hy = -0.024 * hk;
+          const pts: P3[] = [
+            [hx * 0.4, yT, -0.06 * hk],
+            [hx * 0.9, hy - 0.012 * hk, -0.052 * hk],
+            [hx, hy - 0.002 * hk, -0.03 * hk],
+            [hx, hy, 0.01 * hk],
+            [hx, hy - 0.002 * hk, 0.05 * hk],
+            [hx * 0.9, hy - 0.012 * hk, 0.072 * hk],
+            [hx * 0.4, yT, 0.08 * hk],
+          ];
+          for (let i = 0; i < pts.length - 1; i++) stick(b, add(g, lerp3(pts[i], pts[i + 1], -0.08)), add(g, lerp3(pts[i], pts[i + 1], 1.08)), 0.0052, 6);
+          for (const zz of [-0.06, 0.08]) softBox(b, add(g, [hx * 0.4 + 0.008, yT - 0.002, zz * hk]), [0.012, 0.012, 0.02]);
+        } else {
+          stick(b, add(g, [0.008, yT, -0.045 * hk]), add(g, [0.008, -0.012 * hk, -0.035 * hk]), 0.006);
+          stick(b, add(g, [0.008, -0.012 * hk, -0.035 * hk]), add(g, [0.008, -0.004 * hk, 0.0]), 0.006);
+          stick(b, add(g, [0.008, -0.004 * hk, 0.0]), add(g, [0.008, -0.012 * hk, 0.045 * hk]), 0.006);
+          stick(b, add(g, [0.008, -0.012 * hk, 0.045 * hk]), add(g, [0.008, yT, 0.055 * hk]), 0.006);
+        }
+        const yl = -0.15 * hk + 0.13 * hk - 0.035 * hk - caseDrop;
         for (const sx of [1, -1]) softBox(b, add(g, [0.008 + sx * 0.039 * hk, yl, 0.01]), [0.004, 0.006, 0.364 * hk]);
         for (const zz of [-0.1, 0.12]) for (const sx of [1, -1]) softBox(b, add(g, [0.008 + sx * 0.039 * hk, yl - 0.012, zz * hk]), [0.004, 0.018, 0.022]);
       } else stick(b, add(g, [0.008, -0.02 * hk, -0.04 * hk]), add(g, [0.008, -0.02 * hk, 0.05 * hk]), 0.008);
@@ -2508,7 +2540,12 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     b.use(BONE.HAND_R, REG.DARK, FB.PHONE, 1);
     {
       const g = grip(-1);
-      softBox(b, add(g, [0.012, -0.005, 0.018]), [0.012, 0.13 * hk, 0.065 * hk]);
+      if (cfg.close && sweepPeople('grips')) {
+        // from the heel of the hand to the middle of the fingers, resting on them, the fingertips coming round its far end; a screen on the face side
+        softBox(b, add(g, [0.021, 0.006, 0.004]), [0.009, 0.14 * hk, 0.068 * hk]);
+        b.use(BONE.HAND_R, REG.WHITE, FB.PHONE, 0.42);
+        softBox(b, add(g, [0.0262, 0.006, 0.004]), [0.0008, 0.128 * hk, 0.06 * hk]);
+      } else softBox(b, add(g, [0.012, -0.005, 0.018]), [0.012, 0.13 * hk, 0.065 * hk]);
     }
     b.use(BONE.HAND_R, REG.WHITE, FB.CUP, 0.95);
     {
@@ -2552,6 +2589,32 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   if (!far) {
     // newspaper held in front of the chest (bench readers)
     b.use(BONE.CHEST, REG.WHITE, FB.NEWSPAPER, 0.96);
+    if (cfg.close && sweepPeople('propprint')) {
+      // an open sheet: two pages meeting at a fold, bowing a little, sagging at the bottom corners away from the hands
+      const w = 0.235 * hk,
+        h = 0.17 * hk,
+        cy = d.chest.y + 0.08 * hk;
+      const NX = 16,
+        NY = 4;
+      for (const [o, up, tint] of [[0, 1, 0.96], [0.0016, -1, 0.9]] as [number, number, number][]) {
+        b.setTint(tint);
+        const rows: number[][] = [];
+        for (let j = 0; j <= NY; j++) {
+          const v = j / NY;
+          const row: number[] = [];
+          for (let i = 0; i <= NX; i++) {
+            const u = (i / NX) * 2 - 1;
+            const au = Math.abs(u);
+            const z = 0.4 * hk - 0.052 * hk * au + 0.012 * hk * Math.sin(au * Math.PI) - 0.018 * hk * v * (1 - au) * 0.4 + o;
+            const y = cy + h - 2 * h * v - 0.014 * hk * v * v * au * au;
+            row.push(b.v([u * w, y, z], 0, 0, u, 1 - v));
+          }
+          rows.push(row);
+        }
+        for (let j = 0; j < NY; j++) for (let i = 0; i < NX; i++) b.quadDir(rows[j][i], rows[j][i + 1], rows[j + 1][i + 1], rows[j + 1][i], [0, 0, up]);
+      }
+      b.setTint(1);
+    } else
     softBox(b, [0, d.chest.y + 0.08 * hk, 0.36 * hk], [0.46 * hk, 0.3 * hk, 0.008]);
   }
   // umbrella (right hand grip, kept upright) and beach towel

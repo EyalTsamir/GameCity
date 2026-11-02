@@ -9,7 +9,7 @@ import { Member, Party } from '/src/sim/pedestrians/crowd';
 import { CrowdRenderer } from '/src/sim/pedestrians/render';
 import { rigOf } from '/src/sim/pedestrians/rig';
 import { figureMesh } from '/src/sim/pedestrians/body';
-import { DOG_OFFSET } from '/src/sim/pedestrians/figure';
+import { DOG_OFFSET, F } from '/src/sim/pedestrians/figure';
 import { globalUniforms } from '/src/core/uniforms';
 
 const q = new URLSearchParams(location.search);
@@ -84,6 +84,7 @@ for (let i = 0; members.length < (onlyIdx ? onlyIdx.length : n); i++) {
   const FUR = [[0x8a5a33, 0x5a3b26], [0x2a2522, 0x151312], [0xefe6d8, 0xc9b8a0], [0xd2a35c, 0xa8783c], [0x8d8a86, 0x5e5b58], [0xf2efe9, 0x2a2522], [0xb5703a, 0xf2efe9]];
   look.dog = q.has('dog') ? { fur: FUR[members.length % 7][0], fur2: FUR[members.length % 7][1], collar: 0xc8323c, size: num('dogsize', 1) } : null;
   look.pram = null;
+  if (q.has('flag')) { look.flags &= ~(F.SHOPBAG | F.BRIEFCASE | F.HANDBAG | F.BACKPACK | F.CANE); for (const fl of q.get('flag')!.split(',')) look.flags |= (F as Record<string, number>)[fl] ?? 0; }
   // &hat=<style 0-7> &hair=<HairStyle> &hairlen= &hc=<#rrggbb>: every figure in one hat or cut
   if (look.style) {
     if (q.has('hat')) look.style.hat = num('hat', 0);
@@ -99,6 +100,8 @@ for (let i = 0; members.length < (onlyIdx ? onlyIdx.length : n); i++) {
   m.fade = 1;
   m.present = true;
   m.yaw = 0;
+  // &walkprop=1 a cup, 2 a phone; &flag=SHOPBAG,BRIEFCASE… carried things
+  if (q.has('walkprop')) m.walkProp = num('walkprop', 0);
   members.push(m);
 }
 const crowd = { parties: [] as Party[] };
@@ -108,6 +111,7 @@ const labels: string[] = [];
 const write = () => renderer.write(crowd as never, camera, T, 0, rig.night, 1025, null, 0);
 const heightOf = (m: Member) => {
   const st = rigOf(m.look).stature;
+  if (q.has('hf')) return st * num('hf', 0.5);
   return part === 'hand' ? st * 0.47 : part === 'foot' ? 0.12 : part === 'body' ? st * 0.55 : part === 'hip' ? st * 0.53 : part === 'shin' ? st * 0.2 : part === 'shoulder' ? st * 0.76 : part === 'neck' ? st * 0.81 : st * 0.925;
 };
 function drawCell(i: number, m: Member, yaw: number, dist: number, h: number): void {
