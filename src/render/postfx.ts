@@ -203,7 +203,7 @@ export default function create(ctx: CityContext): CityModule {
   }
   // ?nanviz (debug): NaN/Inf scene pixels show up magenta in the final image instead of black
   // temporal AA at the end of the chain (postfx/taa.ts, ?notaa = SMAA as before; the tabletop model keeps SMAA)
-  const taa = world && flickerFix(quality.level, 'taa') ? new TemporalAA(camera, ctx, { alpha: Number(params.get('taaa') ?? 0.07), sharp: Number(params.get('taas') ?? 0.6), jitter: Number(params.get('taaj') ?? 0.6), neverRest: params.has('taamove') }) : null;
+  const taa = world && flickerFix(quality.level, 'taa') ? new TemporalAA(camera, ctx, { alpha: Number(params.get('taaa') ?? 0.07), sharp: Number(params.get('taas') ?? 0.6), jitter: Number(params.get('taaj') ?? 0.6), calm: Number(params.get('taaw') ?? 0.2), neverRest: params.has('taamove') }) : null;
   const look = new LookEffect(TONE_MAPPING, params.has('nanviz'), worldGrade, !!taa);
   const aaMode = taa ? 'none' : (params.get('aa') ?? 'smaa');
   let smaa: Effect;

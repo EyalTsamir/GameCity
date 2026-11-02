@@ -19,10 +19,11 @@
 // A jitter that never stops makes a still picture shimmer by a little, everywhere, and a still camera used to give a perfectly
 // still picture. So once the camera stops the mean settles (about a second, each frame counting less), then the jitter stops:
 //   settling  the mean of many offsets, weights falling as 1/n
-//   frozen    no feedback at all, so nothing can linger. The settled picture and the sample and depth under it are kept, and each frame
+//   frozen    nothing can linger on a surface that stays. The settled picture and the sample and depth under it are kept, and each frame
 //             is this frame's sample plus what settling added to that pixel, as long as the same surface is there: same depth, about the
-//             same value. A bus, a walker, a leaf is simply this frame's sample, exactly what is there now. A running mean over a
-//             city in motion left buses with two fronts and people torn apart, and the ghosts of those who had left.
+//             same value. A running mean over a city in motion left buses with two fronts and people torn apart, and the ghosts of those
+//             who had left, so a mover is simply this frame's sample. What else changes (a leaf, a shadow) is calmed by a running mean of
+//             its own, clipped to this frame's neighbourhood, and leaves no trace once the pixel is back on its surface.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
@@ -36,6 +37,9 @@ uniform sampler2D tPrev;
 uniform highp sampler2D tDepth;
 uniform highp sampler2D tPrevZ;
 uniform sampler2D tMovers;
+/** frozen: the last picture shown; how much of this frame counts where something changes */
+uniform sampler2D tLast;
+uniform float uCalm;
 /** projection's [10], [14]: raw depth to distance */
 uniform vec2 uP;
 /** how much of this frame counts whatever else is true: the camera's own travel */
@@ -90,6 +94,8 @@ void main() {
   float speed = 0.0;
   float a = uAlpha;
   float hA = 1.0;
+  vec3 aim = cur;
+  vec3 last = vec3(0.0);
   float d = texelFetch(tDepth, p, 0).x;
   if (uMode > 2.5) {
     vec4 settled4 = texelFetch(tHistory, p, 0);
@@ -100,10 +106,15 @@ void main() {
     float z = uP.y / (d * 2.0 - 1.0 + uP.x), z0 = texelFetch(tPrevZ, p, 0).r;
     // (the same surface, light allowed to move a little: the sun, a cloud's shadow. Alpha: how much of this is the settled picture, for the sharpening)
     float w = settled4.a > 0.9 && abs(z - z0) < z0 * 0.01 ? 1.0 - smoothstep(0.03, 0.1, m) : 0.0;
-    gl_FragColor = vec4(clamp(cur + w * (settled - under), 0.0, 1.0), w);
-    return;
-  }
-  {
+    aim = clamp(cur + w * (settled - under), 0.0, 1.0);
+    vec4 l = texelFetch(tLast, p, 0);
+    if (w > 0.999 || uCalm > 0.99 || l.a < 0.1) {
+      gl_FragColor = vec4(aim, l.a < 0.1 ? 0.34 : 1.0);
+      return;
+    }
+    last = l.rgb;
+    a = uCalm;
+  } else {
     vec4 clip = uReproject * vec4(vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0);
     huv = clip.xy / clip.w * 0.5 + 0.5;
     if (huv.x < 0.0 || huv.x > 1.0 || huv.y < 0.0 || huv.y > 1.0) {
@@ -146,17 +157,17 @@ void main() {
   vec3 mean = m1 / 9.0;
   vec3 sigma = sqrt(max(m2 / 9.0 - mean * mean, vec3(0.0)));
   // while the camera rests a wider window: a detail finer than a pixel is in some frames' neighbourhood only
-  float gamma = uMode > 0.5 ? 2.5 : mix(1.5, 0.8, smoothstep(0.0, 2.0, speed));
+  float gamma = uMode > 2.5 ? 1.25 : uMode > 0.5 ? 2.5 : mix(1.5, 0.8, smoothstep(0.0, 2.0, speed));
   vec3 lo = mean - gamma * sigma - 0.002;
   vec3 hi = mean + gamma * sigma + 0.002;
-  vec3 h = toY(speed < 0.01 ? texelFetch(tHistory, p, 0).rgb : historyCR(huv));
+  vec3 h = toY(uMode > 2.5 ? last : speed < 0.01 ? texelFetch(tHistory, p, 0).rgb : historyCR(huv));
   // clip towards the mean: keeps the hue, unlike a box clamp per channel
   vec3 cen = 0.5 * (hi + lo), ext = max(0.5 * (hi - lo), vec3(1e-4));
   vec3 off = h - cen;
   vec3 un = abs(off / ext);
   float k = max(un.x, max(un.y, un.z));
   if (k > 1.0) h = cen + off / k;
-  gl_FragColor = vec4(clamp(fromY(mix(h, cy, a)), 0.0, 1.0), min(1.0, hA + 0.34));
+  gl_FragColor = vec4(clamp(fromY(mix(h, toY(aim), a)), 0.0, 1.0), min(1.0, hA + 0.34));
 }
 `;
 
@@ -255,8 +266,9 @@ export class TemporalAA {
   /** frames the camera has not moved */
   private rest = 0;
   private jittered = false;
-  /** hist[1] holds the last frame shown, and hist[0] and inputPrev the settled picture and the sample under it */
+  /** the last frame shown is in `last`, and hist[0] and inputPrev hold the settled picture and the sample under it */
   private frozen = false;
+  private last: THREE.WebGLRenderTarget;
   private movers: MoverMask;
   private alpha: number;
   private neverRest: boolean;
@@ -264,7 +276,7 @@ export class TemporalAA {
   constructor(
     private camera: THREE.PerspectiveCamera,
     ctx: CityContext,
-    opts: { alpha: number; sharp: number; jitter: number; neverRest?: boolean },
+    opts: { alpha: number; sharp: number; jitter: number; calm: number; neverRest?: boolean },
   ) {
     this.movers = new MoverMask(ctx);
     this.input = target(4, 4, 'TAA.Input');
@@ -277,6 +289,7 @@ export class TemporalAA {
     // (?taamove, for measuring: the moving path's cost with a still camera)
     this.neverRest = !!opts.neverRest;
     this.hist = [target(4, 4, 'TAA.HistoryA'), target(4, 4, 'TAA.HistoryB')];
+    this.last = target(4, 4, 'TAA.Last');
     this.jitterK = opts.jitter;
     this.resolve = new FullscreenPass(
       new THREE.ShaderMaterial({
@@ -287,6 +300,8 @@ export class TemporalAA {
           tPrev: { value: null },
           tPrevZ: { value: this.prevZ.texture },
           tMovers: { value: this.movers.target.texture },
+          tLast: { value: null },
+          uCalm: { value: opts.calm },
           uP: { value: new THREE.Vector2() },
           uFloor: { value: 0 },
           uMode: { value: 0 },
@@ -328,6 +343,7 @@ export class TemporalAA {
     this.movers.setSize(w, h);
     this.hist[0].setSize(w, h);
     this.hist[1].setSize(w, h);
+    this.last.setSize(w, h);
     this.fresh = true;
   }
 
@@ -394,11 +410,13 @@ export class TemporalAA {
     // the camera moves again after a rest: on from the last picture shown
     if (this.frozen && r <= SETTLE) {
       const t = this.hist[0];
-      this.hist[0] = this.hist[1];
-      this.hist[1] = t;
+      this.hist[0] = this.last;
+      this.last = t;
       u.tHistory.value = this.hist[0].texture;
       this.frozen = false;
     }
+    // (the first frozen frame goes on from the settled picture)
+    u.tLast.value = this.frozen ? this.last.texture : this.hist[0].texture;
     u.uMode.value = r === 0 ? 0 : r < SETTLE ? 1 : r === SETTLE ? 2 : 3;
     const n = THREE.MathUtils.smoothstep(this.nearPx, 2, 8);
     u.uFloor.value = n;
@@ -421,6 +439,9 @@ export class TemporalAA {
     this.present.material.uniforms.uSharp.value = this.sharp * (1 - THREE.MathUtils.smoothstep(Math.max(this.nearPx, this.turnPx), 1, 5));
     this.present.render(renderer, null);
     if (r > SETTLE) {
+      const t = this.hist[1];
+      this.hist[1] = this.last;
+      this.last = t;
       this.frozen = true;
       return;
     }
@@ -440,6 +461,7 @@ export class TemporalAA {
     this.zcopy.dispose();
     this.hist[0].dispose();
     this.hist[1].dispose();
+    this.last.dispose();
     this.resolve.dispose();
     this.present.dispose();
   }
