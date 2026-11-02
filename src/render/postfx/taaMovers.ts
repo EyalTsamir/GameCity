@@ -41,6 +41,8 @@ const CAP = 1500;
 /** people further off than this are a few pixels, and they are most of the boxes */
 const PEOPLE_FAR2 = 300 * 300;
 const BIRDS_FAR2 = 150 * 150;
+/** beyond this a ride's rim and spokes are under a pixel: one frame's sample is a cloud of dots, and only history holds them together */
+const RIDES_FAR2 = 200 * 200;
 const _clear = new THREE.Color();
 /** frames a thing that stopped stays masked */
 const HOLD = 4;
@@ -140,7 +142,7 @@ export class MoverMask {
   private collect(eye: THREE.Vector3): void {
     this.n = 0;
     const s = this.ctx.services as unknown as MoverServices;
-    for (const r of this.ridesNow(s)) this.add(r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
+    for (const r of this.ridesNow(s)) if ((r[0] - eye.x) ** 2 + (r[2] - eye.z) ** 2 < RIDES_FAR2) this.add(r[0], r[1], r[2], r[3], r[4], r[5], r[6]);
     // (a little longer than the thing: last frame's place, mirrors, a rider's elbow)
     const vehicles = s.traffic?.vehicles();
     if (vehicles) for (const V of vehicles) if (this.moved(V, V.x, V.z)) this.add(V.x, 0, V.z, V.yaw, V.hw + 0.5, (V.spec?.height ?? 2) * 0.5 + 0.8, V.len * 0.5 + 0.8);
