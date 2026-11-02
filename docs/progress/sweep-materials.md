@@ -28,7 +28,7 @@ Branch `claude/laughing-antonelli-3a55b3`, port 5233. Switches in `src/core/swee
 | cardboard as planks | it was the timber material | `matcard`: its own, matt, no grain |
 | grain across the boards of a jetty ("motion blur") | the close layer took the grain from the long side of the quad | `matplank`: harbour decks say which way their boards run |
 | letters past the fold of a bill: a star on the air beside a poster column | a clipped letter was drawn whole on the side of its centre | `matsign`: cut at the fold, on both sides |
-| pale torn patches and fine stripes at both sides of the church tower (`lm-church-spire_3m`) | real z-fighting: each 0.7 m thick tower wall has an end face, and it lies in the plane of the next wall's front, with other pattern coordinates. It takes both sides of the corner, the last 0.7 m of each wall. Not AO, shadow, clouds, edge wear, the lens or shafts: all switched off one by one, TAA off only shows it as raw stripes | `matcorner`: `wall({ meets: true })` has no end faces, the fronts meet at the corner line. Same triangles otherwise, 8 fewer per corner |
+| pale torn patches and fine stripes at both sides of the church tower (`lm-church-spire_3m`) | real z-fighting: each 0.7 m thick tower wall has an end face, and it lies in the plane of the next wall's front, with other pattern coordinates. It takes both sides of the corner, the last 0.7 m of each wall. Not AO, shadow, clouds, edge wear, the lens or shafts: all switched off one by one, TAA off only shows it as raw stripes | `matcorner`: `wall({ meets: true })` has no end faces, the fronts meet at the corner line. Same triangles otherwise, 4 fewer per corner |
 
 ## Not bugs
 
@@ -43,13 +43,12 @@ Branch `claude/laughing-antonelli-3a55b3`, port 5233. Switches in `src/core/swee
 ## Still open
 
 - **The same corner overlap on other walls.** Only the church tower has `meets`. The station's towers (`station.ts:278`) and other pairs of `wall()` that meet at a corner have the same geometry; a pair with one wall ending free needs one end kept, so `meets` as it stands doesn't fit them. No scan for coplanar overlaps across the city was run.
-- **Half a face rough, half smooth, split on a line of 8 m cells** (`lm-station-clock_3m` at x = 0, `feat-lighthouse_1m` at x = 184). The close-up copy of a face is missing on one side of the line, for faces near z = -130.11. Cells are visible and built, the clip code reads right, and `keep` is not the plain answer. Of 264 pieces checked near that plane, 3 had no copy; the list of those 3 (`nearcheck2`) was not read before the limit. **Cause unknown.**
+- **Half a face rough, half smooth, split on a line of 8 m cells** (`lm-station-clock_3m` at x = 0, `feat-lighthouse_1m` at x = 184). The close-up copy of a face is missing on one side of the line, for faces near z = -130.11. Cells are visible and built, the clip code reads right, and `keep` is not the plain answer. Of 264 pieces checked near that plane, 3 had no copy in the right cell, all at the station: the two triangles of a plaque (`landmarks-static-station-91`, x -0.8 to 0.8, y 14.2 to 14.7, z -130.11, plain surface) and one detail triangle (x 2.3 to 0, y 13.2 to 13.6, z -130.06). Their own attributes show nothing odd, other faces crossing x = 0 at z -130.13 are fine, and reading `TriGrid` (buckets, then `clip`) by hand finds no fault. Next step: call `grid.build` for that cell in the page and look for these triangles at each stage. **Cause unknown.**
 - `keep` in `closemat.ts` also shows that `cmMasonry` has `top` 8: above about 20 m the close-up layer is off, so a camera up a tower sees plain landmark material. By design, noted because it looks like a bug.
 - Crop atlas 128 px per band: blocky sunflowers, and `land-village` leaf cards close up. Needs more texture, a budget question.
 - `lm-room-stadium_1m`: a green hard-edged patch on the ceiling and faint looping fissures on plaster. Not looked into.
 - `bld-tower-scheme-6_1m`: blue mottled door frames (the view is blurred, so unconfirmed). A thin red line near the bus stop flag.
 - Garage doors keep some brushed look, softer than before.
-- The TINYBUILD stripe count (4, clear of the T) is in `feat-towercrane_10m` of `shots/mat/r3`; that frame was not looked at after the change.
 - Console: `THREE.BufferGeometry.toNonIndexed(): already non-indexed` is older than this work (`smalllife/litter.ts` or near it). The final check filters it out.
 - Most of this was checked by eye at noon. 18.2 and 21.5 were not gone through for every fix.
 
@@ -62,7 +61,7 @@ Branch `claude/laughing-antonelli-3a55b3`, port 5233. Switches in `src/core/swee
 | street | 40.51 | 40.27 | -0.47 ±0.62 |
 | market | 37.04 | 36.89 | -0.14 ±0.28 |
 
-Both inside +0.3 ms by this measure, and no cost can be told from zero. The other switches are written into shader text or geometry at boot, so abprof can't reach them. For those, `perf.mjs` over page loads, `;nosweepmat` against baseline: street 37.80 vs 37.41 (+0.39), market 37.52 vs 37.35 (+0.17). Reload noise is ±1-2 ms, so this doesn't confirm the +0.3 ms limit for street, it only finds nothing above the noise. Street also differed by 39 draw calls and 625 k triangles between the two runs, and market by 1 draw and 2 k: most likely how far the near bubble had filled, not explained. These ran with `matcorner` arriving mid-run (geometry only, a few triangles fewer).
+Both inside +0.3 ms by this measure, and no cost can be told from zero. The other switches are written into shader text or geometry at boot, so abprof can't reach them. For those, `perf.mjs` over page loads, `;nosweepmat` against baseline: street 37.80 vs 37.41 (+0.39), market 37.52 vs 37.35 (+0.17). Reload noise is ±1-2 ms, so this doesn't confirm the +0.3 ms limit for street, it only finds nothing above the noise. Street also differed by 39 draw calls and 625 k triangles between the two runs, and market by 1 draw and 2 k: most likely how far the near bubble had filled, not explained. `matcorner` went in while this was queued: the `perf.mjs` pages have it, the abprof page may not. It is geometry only, 16 triangles fewer.
 
 ## Checks
 
