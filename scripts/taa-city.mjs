@@ -4,7 +4,7 @@
 // (docs/progress/sweep-flicker.md). Always read the frames.
 //
 //   node scripts/taa-city.mjs --url http://127.0.0.1:5234/ --out shots/flick/city --hours 12,21.5 --variants "taa=;notaa=notaa"
-//     --subjects bus,car,walker   --modes still,nudge,settling   --shots 4   --gap 8 (frames between shots)
+//     --subjects "bus;car;walker;train;boat;carousel;crane;at:market=27.5,1,78.5,16,200,28"   --modes still,nudge,settling   --shots 4   --gap 8 (frames between shots)
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -18,7 +18,7 @@ const base = args.url ?? 'http://127.0.0.1:5173/';
 const out = args.out ?? 'shots/flick/city';
 const list = (s) => s.split(',').filter(Boolean);
 const hours = list(args.hours ?? '12,21.5').map(Number);
-const subjects = list(args.subjects ?? 'bus,car,walker');
+const subjects = (args.subjects ?? 'bus;car;walker').split(/;|,(?=[a-z])/).filter(Boolean);
 const modes = list(args.modes ?? 'still,nudge');
 const shots = parseInt(args.shots ?? '4', 10);
 const gap = parseInt(args.gap ?? '8', 10);
@@ -28,10 +28,52 @@ fs.mkdirSync(out, { recursive: true });
 /** the subject now and its heading; the camera stands off its path, ahead of it, looking across */
 const aim = async ([subject, D, lead]) => {
   const c = window.__city.ctx;
+  const cam = c.services.camera;
+  // what stands in one place and moves there
+  if (subject.startsWith('at:')) {
+    const [x, y, z, distance, yaw, pitch] = subject.split('=')[1].split(',').map(Number);
+    cam.flyTo({ target: { x, y, z }, distance, yaw, pitch }, 0);
+    return { fixed: subject };
+  }
+  if (subject === 'crane') {
+    const k = c.services.harbor.cranes()[0];
+    cam.flyTo({ target: { x: k.x, y: 20, z: k.z }, distance: 70, yaw: 30, pitch: 5 }, 0);
+    return { fixed: subject };
+  }
+  if (subject === 'kite') {
+    const k = c.services.ambientDebug.locate('kite', 0);
+    cam.flyTo({ target: { x: k.x, y: k.y - 4, z: k.z }, distance: 22, yaw: 250, pitch: -8 }, 0);
+    return { fixed: subject };
+  }
+  if (subject === 'fireworks') {
+    c.events.emit('fireworks:launch', { duration: 30 });
+    cam.flyTo({ target: { x: 180, y: 30, z: -58 }, distance: 120, yaw: 280, pitch: -5 }, 0);
+    await new Promise((r) => setTimeout(r, 5000));
+    return { fixed: subject };
+  }
+  const f = c.plan.features.find((q) => q.kind === subject);
+  if (f && subject === 'windturbine') {
+    cam.flyTo({ target: { x: f.x, y: 30, z: f.z }, distance: 70, yaw: 180 * f.yaw / Math.PI, pitch: 2 }, 0);
+    return { fixed: subject };
+  }
+  if (f) {
+    cam.flyTo({ target: { x: f.x, y: 3, z: f.z }, distance: 14, yaw: 20, pitch: 6 }, 0);
+    return { fixed: subject };
+  }
   const pick = () => {
     if (subject === 'walker') {
       return c.services.pedestrians._crowd.parties.flatMap((p) => p.members);
     }
+    if (subject === 'train') {
+      const rz = c.plan.rail.z;
+      return c.services.rail.sim.trains.filter((t) => t.v > 2 && Math.abs(t.cars[0].x) < 170).map((t) => ({
+        get x() {
+          return t.cars[0].x;
+        },
+        z: rz,
+      }));
+    }
+    if (subject === 'boat') return [...c.services.boats.fleet.boats];
     const vs = c.services.traffic.vehicles().filter((V) => V.v > 2.5);
     return vs.filter((V) => V.isBus === (subject === 'bus'));
   };
@@ -60,6 +102,11 @@ const aim = async ([subject, D, lead]) => {
     if (best) break;
   }
   if (!best) return null;
+  if (subject === 'train') {
+    // (from above, over whatever grows along the line)
+    c.services.camera.flyTo({ target: { x: best.fx, y: 3, z: best.fz }, distance: 45, yaw: 180, pitch: 16 }, 0);
+    return best;
+  }
   const yr = (best.yaw * Math.PI) / 180;
   c.services.camera.flyTo({ target: { x: best.cx - Math.sin(yr) * D, y: best.cy, z: best.cz - Math.cos(yr) * D }, distance: D, yaw: best.yaw, pitch: 0 }, 0);
   return best;
@@ -105,7 +152,7 @@ try {
       await page.evaluate((hh) => window.__city.setHours(hh), h);
       for (const subject of subjects)
         for (const mode of modes) {
-          const D = subject === 'walker' ? 5 : subject === 'car' ? 8 : 11;
+          const D = subject === 'walker' ? 5 : subject === 'car' ? 8 : subject === 'boat' ? 35 : subject === 'train' ? 16 : 11;
           // settling: the frames come while the camera has just stopped; still: after it has come to rest (24 frames)
           const lead = mode === 'settling' ? 0.35 : subject === 'walker' ? 2 : 2.2;
           let a = null;
@@ -113,7 +160,7 @@ try {
             a = await page.evaluate(aim, [subject, D, lead]);
             if (!a) await page.waitForTimeout(1500);
           }
-          const tag = `${name}_${String(h).replace('.', 'h')}_${subject}_${mode}`;
+          const tag = `${name}_${String(h).replace('.', 'h')}_${subject.split('=')[0].replace('at:', '')}_${mode}`;
           if (!a) {
             report.taken.push({ tag, missing: true });
             continue;

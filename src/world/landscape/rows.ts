@@ -5,7 +5,8 @@
 // Beyond ~1 km plant strips sink into the ground (the land shader's stripes carry the field from there).
 
 import * as THREE from 'three';
-import { WIND_GLSL } from '../../core/wind';
+import { MOTION_KEEP_GLSL, WIND_GLSL } from '../../core/wind';
+import { globalUniforms } from '../../core/uniforms';
 import { closeNatureOn } from '../../core/closenature';
 import type { UnderPlant } from '../closenature/sprigs';
 import { hash2i } from './noise';
@@ -669,6 +670,8 @@ export function rowMaterial(atlas: THREE.Texture, uniforms: Record<string, THREE
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uniforms.uTime;
     sh.uniforms.uWind = uniforms.uWind;
+    sh.uniforms.uNearEye = globalUniforms.uNearEye;
+    sh.uniforms.uNearLens = globalUniforms.uNearLens;
     sh.uniforms.uNight = uniforms.uNight;
     sh.vertexShader = sh.vertexShader
       .replace(
@@ -677,7 +680,10 @@ export function rowMaterial(atlas: THREE.Texture, uniforms: Record<string, THREE
 attribute float aH;
 uniform float uTime;
 uniform vec2 uWind;
-${WIND_GLSL}`,
+uniform vec3 uNearEye;
+uniform float uNearLens;
+${WIND_GLSL}
+${MOTION_KEEP_GLSL}`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -690,7 +696,7 @@ if (aH > 0.0) {
     ${closeNatureOn('closesprigs') ? 'transformed.y -= ah * 2.4 * (1.0 - smoothstep(6.5, 10.0, d));' : ''}
   }
   transformed.y -= ah * smoothstep(1050.0, 1350.0, d);
-  transformed.xz += thWindAt(position.xz) * ah * 0.05 * (1.0 + 0.35 * sin(uTime * 1.9 + dot(position.xz, vec2(0.6, 0.8))));
+  transformed.xz += thWindAt(position.xz) * ah * 0.05 * (1.0 + 0.35 * thMotionKeep(position, ah * 0.0175) * sin(uTime * 1.9 + dot(position.xz, vec2(0.6, 0.8))));
 }`,
       );
     sh.fragmentShader = sh.fragmentShader

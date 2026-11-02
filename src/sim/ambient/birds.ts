@@ -197,6 +197,8 @@ interface Flock {
 // ─────────────────────────────────────────────────────────────── system ──
 export interface BirdSystem {
   mesh: THREE.InstancedMesh;
+  /** every bird, for temporal AA's mask of what moves */
+  all: readonly { x: number; y: number; z: number }[];
   /** debug: world position of a bird ('flock', 'gull', 'pigeon', 'butterfly') */
   locate(kind: string, i: number): { x: number; y: number; z: number } | null;
   update(dt: number): void;
@@ -1322,6 +1324,7 @@ export function createBirds(ctx: CityContext, skyline: SkylineGrid): BirdSystem 
   let acc = 0;
   return {
     mesh: rm.mesh,
+    all,
     timejump,
     locate(kind, i) {
       if (kind === 'swift') {
