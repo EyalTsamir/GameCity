@@ -9,6 +9,12 @@ import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { roadNoise } from '../roads/materials';
 import { MOTION_KEEP_GLSL, WIND_GLSL } from '../../core/wind';
+import { wearOn } from '../../core/sweepwear';
+
+// (`wearrust`: at these albedos sunlit rust read as orange paint)
+const RUST_CHIP = wearOn('wearrust') ? '0.1, 0.05, 0.028' : '0.2, 0.095, 0.04';
+const RUST_LO = wearOn('wearrust') ? '0.1, 0.047, 0.024' : '0.16, 0.07, 0.03';
+const RUST_HI = wearOn('wearrust') ? '0.18, 0.086, 0.04' : '0.28, 0.13, 0.055';
 
 // Weathering by material class (recognised from the per-vertex roughness / metalness of furniture.ts MAT):
 // stone / concrete — grime at the foot, rain streaks, lichen spots, green algae on the north side;
@@ -79,7 +85,7 @@ void pWear(inout vec3 col, inout float rgh, inout float mtl, vec3 pw, vec3 n) {
     float rs = smoothstep(0.74, 0.8, nA.a * 0.55 + nA.r * 0.45);
     float st = smoothstep(0.6, 0.85, nB.b) * (1.0 - an.y) * 0.5;
     float r = clamp(rs + st * smoothstep(0.4, 0.7, nA.g), 0.0, 1.0);
-    vec3 rc = mix(vec3(0.16, 0.07, 0.03), vec3(0.28, 0.13, 0.055), nA.g);
+    vec3 rc = mix(vec3(${RUST_LO}), vec3(${RUST_HI}), nA.g);
     col = mix(col, rc, r * 0.8);
     rgh = mix(rgh, 0.85, r);
     mtl = mix(mtl, 0.1, r);
@@ -93,7 +99,7 @@ void pWear(inout vec3 col, inout float rgh, inout float mtl, vec3 pw, vec3 n) {
     col = mix(col, vec3(lumP) * 1.08 + 0.02, (0.1 + 0.12 * nA.r) * (1.0 - north));
     float chv = nA.a * 0.7 + nA.b * 0.3;
     float ch = smoothstep(0.76, 0.79, chv) * fine;
-    vec3 chipC = nA.r > 0.62 ? vec3(0.2, 0.095, 0.04) : (nA.r > 0.35 ? vec3(0.55, 0.53, 0.5) : vec3(0.2, 0.19, 0.18));
+    vec3 chipC = nA.r > 0.62 ? vec3(${RUST_CHIP}) : (nA.r > 0.35 ? vec3(0.55, 0.53, 0.5) : vec3(0.2, 0.19, 0.18));
     col = mix(col, chipC, ch * 0.85);
     col *= 1.0 - 0.12 * fine * (smoothstep(0.73, 0.76, chv) - ch); // the lifted rim round a chip
     float bleed = smoothstep(0.62, 0.86, nB.b) * smoothstep(0.55, 0.75, nA.r) * (1.0 - an.y);

@@ -99,6 +99,30 @@ float cmLight(vec3 N, vec3 n) {
 float cmArea(vec2 dx, vec2 dy) {
   return sqrt(abs(dx.x * dy.y - dx.y * dy.x)) + 1e-6;
 }
+#ifdef CM_FISSURE
+// A crack in the surface, as a ratio. c: the crack tile read at uv (s to the metre). stress 0..1 opens the network from nothing,
+// so a crack thins out wherever the strain ends and never stops dead. Thinner than a pixel it is a faint thread, not a black line:
+// it covers only that part of the pixel. Up close a groove: dark at heart, the wall facing away from the light l in shade, the
+// other wall and its lip catching it. rough: the edge of a break, in metres.
+float cmFissure(vec4 c, vec2 uv, float s, float stress, float fa, vec2 l, float rough) {
+  float w = c.g * 0.0034 * stress;
+  if (w < 0.00012) return 1.0;
+  float d = c.r * 0.04 + rough;
+  float aa = fa * 0.7 + 0.0002;
+  float band = w + 0.0035 + aa;
+  if (d > band) return 1.0;
+  float cov = pow(min(w / aa, 1.0), 0.8) * (1.0 - smoothstep(max(w - aa, 0.0), w + aa, d));
+  float r = mix(1.0, mix(0.64, 0.3, smoothstep(0.0004, 0.002, w)), cov);
+  float near = 1.0 - smoothstep(0.001, 0.0035, fa);
+  if (near > 0.0) {
+    float st = w + 0.002;
+    float side = clamp((d - CMT(tCrack, uv + l * st * s, s).r * 0.04 - rough) / st, -1.0, 1.0);
+    float lip = 1.0 - smoothstep(w, band, d);
+    r *= 1.0 + near * lip * side * (side > 0.0 ? 0.2 : 0.3) * mix(0.5, 1.0, uDaylight);
+  }
+  return r;
+}
+#endif
 `;
 
 /** walls: the same coordinates as bhWall; a 1 outside window openings */
@@ -284,6 +308,7 @@ void main() {
   float light = cmLight(N, normalize(N - T * s.x - U * s.y));
   vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.14) * (1.0 - 0.15 * g.a));
   ratio *= 0.93 + 0.14 * c.b;
+#ifndef CM_FISSURE
   // hairline crazing where the render has been working, the odd longer crack
   float dist = c.r * 0.04;
   float zone = smoothstep(0.55, 0.72, c.b + 0.18 * (w.b - 0.5)) * step(0.3, fract(seed * 0.71 + 0.2));
@@ -291,6 +316,7 @@ void main() {
   float crack = zone * (1.0 - smoothstep(width, width + 0.0012 + fa * 0.8, dist));
   float halo = zone * (1.0 - smoothstep(0.0, 0.012, dist));
   ratio *= (1.0 - 0.1 * halo) * (1.0 - 0.62 * crack);
+#endif
   // chips: the paint and the coat of render gone, at the foot, at the corners and here and there. A ragged lip of paint
   float y = vP.y;
   float flg = floor(vD.w + 0.01);
@@ -310,6 +336,18 @@ void main() {
     ratio = mix(ratio, min(under / max(col, vec3(0.05)), vec3(1.6)), chip);
   }
   ratio *= 1.0 + 0.16 * rim;
+#ifdef CM_FISSURE
+  // render cracks where it is strained: off the corners of the openings, at the wall's own corners, and in patches where it has
+  // been working. Some walls were rendered last year
+  float strain = smoothstep(0.5, 0.68, c.b + 0.22 * (w.b - 0.5));
+  if (vB.x > 0.5 && vB.y > 0.5) {
+    vec2 pmC = fract(vFac) * vC.xy;
+    vec2 eC = vec2(min(abs(pmC.x - vA.x), abs(pmC.x - vA.y)), min(abs(pmC.y - vA.z), abs(pmC.y - vA.w)));
+    strain = max(strain * 0.8, (1.0 - smoothstep(0.03, 0.75, length(eC))) * step(0.4, cmHash(floor(vFac) + seed)));
+  }
+  strain = max(strain, corner * smoothstep(0.42, 0.6, c.b));
+  ratio *= cmFissure(c, q * 0.39 + so * 0.61, 0.39, strain * step(0.3, fract(seed * 0.71 + 0.2)), fa, normalize(vec2(dot(uSunDir, T), max(uSunDir.y, 0.2))), (g.b - 0.5) * 0.002);
+#endif
   if (vP.y < pH) ratio = mix(ratio, vec3(light * (1.0 - 0.3 * g.a)), 0.7);
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
@@ -385,9 +423,13 @@ void main() {
   vec3 ratio = vec3(light * (1.0 + (g.b - 0.5) * 0.2) * (1.0 - 0.3 * g.a));
   ratio *= mix(vec3(0.93, 0.92, 0.9), vec3(1.05, 1.03, 0.99), c.b);
   // veins and fine fissures, in some blocks
+#ifdef CM_FISSURE
+  ratio *= cmFissure(c, q * 0.39 + win * 0.21, 0.39, step(0.75, fract(rnd * 9.1)) * smoothstep(0.42, 0.62, c.b + 0.2 * w.b) * 0.7, fa, normalize(vec2(dot(uSunDir, T), max(uSunDir.y, 0.2))), (g.b - 0.5) * 0.002);
+#else
   float dist = c.r * 0.04;
   float crack = step(0.75, fract(rnd * 9.1)) * (1.0 - smoothstep(0.0009, 0.0024 + fa * 0.8, dist));
   ratio *= 1.0 - 0.55 * crack;
+#endif
   // lichen in the damp (a few pale and dark crusts)
   float lich = smoothstep(0.72, 0.76, c.a * 0.7 + w.b * 0.3) * smoothstep(0.45, 0.7, c.b);
   ratio = mix(ratio, ratio * vec3(1.12, 1.12, 0.92), lich * 0.8);
@@ -430,10 +472,14 @@ void main() {
   ratio *= (1.0 - 0.72 * hole) * (1.0 - 0.14 * ring);
   ratio = mix(ratio, ratio * vec3(0.78, 0.68, 0.56), clamp(weep, 0.0, 1.0) * 0.5 * step(0.35, rnd));
   // a crack or two
+#ifdef CM_FISSURE
+  ratio *= cmFissure(c, q * 0.39 + win * 0.23, 0.39, smoothstep(0.56, 0.75, c.b) * step(0.45, fract(rnd * 3.9)), fa, normalize(vec2(dot(uSunDir, T), max(uSunDir.y, 0.2))), (g.b - 0.5) * 0.002);
+#else
   float dist = c.r * 0.04;
   float zone = smoothstep(0.6, 0.75, c.b) * step(0.45, fract(rnd * 3.9));
   float crack = zone * (1.0 - smoothstep(0.0009, 0.0024 + fa * 0.8, dist));
   ratio *= (1.0 - 0.6 * crack);
+#endif
   // spalled arris along the joints
   vec2 dj = min(cellF, vec2(csx, csy) - cellF);
   float jd = min(dj.x, dj.y);
@@ -471,14 +517,33 @@ void main() {
     float dsc = length(vec2(px, py));
     float screw = 1.0 - smoothstep(0.006, 0.0085, dsc);
     float bleed = (1.0 - smoothstep(0.004, 0.012 + 0.012 * c.a, abs(px))) * smoothstep(0.004, -0.02, py) * (1.0 - smoothstep(0.03, 0.14 + 0.3 * g.b, -py));
+#ifdef CM_WEARRUST
+    // only the screws that have let go weep
+    bleed *= step(0.68, cmHash(floor(vec2(q.x / 0.32 + 0.33, q.y / 1.3 + fract(seed * 0.17))) + seed));
+    // a lap rusts where it holds water, not along its whole length, and some sheets were replaced
+    float lapAge = smoothstep(0.3, 0.8, cmHash(vec2(floor(q.x / 1.92 + fract(seed * 0.37)), seed + 3.1)));
+    lapAge *= smoothstep(0.28, 0.62, CMT(tCrack, vec2(q.x * 0.11, q.y * 0.53) + so.yx, 0.5).b);
+#endif
     // rust: from the foot of a sheet, from laps and fixings, where the paint has broken
     float reach = 0.28 * (1.0 - smoothstep(0.0, 0.2, bot < 0.45 ? 1.0 : 0.0));
+#ifdef CM_WEARRUST
+    float edge = (1.0 - smoothstep(0.0, 0.1, 0.5 - bot)) * 0.26 + (1.0 - smoothstep(0.0, 0.025, 0.5 - lap)) * 0.34 * lapAge + (1.0 - smoothstep(pH, pH + 0.9, vP.y)) * 0.2;
+#else
     float edge = (1.0 - smoothstep(0.0, 0.1, 0.5 - bot)) * 0.3 + (1.0 - smoothstep(0.0, 0.025, 0.5 - lap)) * 0.34 + (1.0 - smoothstep(pH, pH + 1.6, vP.y)) * 0.26;
+#endif
     float fl = c.a * 0.55 + c.b * 0.32 + g.b * 0.13 + edge + reach * 0.0;
     fl += (fract(seed * 0.91) - 0.6) * 0.14;
     float rust = smoothstep(0.76, 0.81, fl);
     float rrim = smoothstep(0.68, 0.76, fl) * (1.0 - rust);
+#ifdef CM_WEARRUST
+    vec3 rc = mix(vec3(0.11, 0.055, 0.028), vec3(0.24, 0.115, 0.05), g.b * 0.6 + c.a * 0.4) * (1.0 - 0.3 * g.a);
+    // what ran down from the rust above: thin orange-brown along the fall of the rain, gone in a hand's length
+    float flUp = CMT(tCrack, (q + vec2(0.0, 0.08 + 0.08 * g.b)) * 0.39 + so * 0.3, 0.39).a * 0.55 + c.b * 0.32 + g.b * 0.13 + edge;
+    float run = smoothstep(0.66, 0.84, flUp) * (1.0 - rust) * (0.45 + 0.9 * f.b);
+    ratio *= mix(vec3(1.0), vec3(0.82, 0.66, 0.5), clamp(run, 0.0, 1.0) * 0.7);
+#else
     vec3 rc = mix(vec3(0.05, 0.033, 0.021), vec3(0.1, 0.062, 0.036), g.b) * (1.0 - 0.3 * g.a);
+#endif
     vec2 s2 = (g.rg - 0.5) * 0.7;
     float lr = cmLight(N, normalize(N - T * s2.x - U * s2.y));
     ratio = mix(ratio, rc * lr / max(col, vec3(0.04)), rust);
@@ -558,10 +623,14 @@ void main() {
   ratio *= 1.0 + (0.5 - s0.a) * 0.16 * (1.0 - stone * 0.5);
   if (fine > 0.0) {
     vec4 c = CMT(tCrack, p * 0.39, 0.39);
+#ifdef CM_FISSURE
+    ratio *= mix(1.0, cmFissure(c, p * 0.39, 0.39, smoothstep(0.54, 0.74, c.b), fa, normalize(uSunDir.xz + 1e-3), (g.b - 0.5) * 0.003), fine);
+#else
     float dist = c.r * 0.04;
     float zone = smoothstep(0.56, 0.72, c.b);
     float crack = zone * (1.0 - smoothstep(0.0008 + 0.0012 * c.a, 0.002 + 0.002 * c.a + fa * 0.8, dist));
     ratio *= 1.0 - 0.6 * crack * fine;
+#endif
   }
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
@@ -598,8 +667,9 @@ float cmHerring(vec2 q, out vec2 cell) {
   return max(e, 0.0);
 }
 // (cell, edge distance): the stone this pixel belongs to; rdHard's layout
-void cmSlab(vec2 p, vec2 q, float frame, vec2 size, out vec2 cell, out float edge) {
+void cmSlab(vec2 p, vec2 q, float frame, vec2 size, out vec2 cell, out float edge, out vec2 lo) {
   float minS = min(size.x, size.y);
+  lo = vec2(0.0);
   if (vV.z < -1.5) {
     float u = size.y;
     edge = cmHerring(q / u, cell) * u;
@@ -631,6 +701,7 @@ void cmSlab(vec2 p, vec2 q, float frame, vec2 size, out vec2 cell, out float edg
   float dx = min(lx - aL, 1.0 + aR - lx) * size.x;
   float dy = abs(fract(qy / size.y + 0.5) - 0.5) * size.y;
   edge = min(dx, dy);
+  lo = (vec2((lx - aL) / (1.0 + aR - aL), fract(qy / size.y)) - 0.5) * size;
 }
 `;
 
@@ -661,9 +732,9 @@ void main() {
   vec2 size = vPp.xy;
   float minS = min(size.x, size.y);
   vec2 q = frame < 1.5 ? uv : vec2(vS.y, 0.5);
-  vec2 cell;
+  vec2 cell, lo;
   float edge;
-  cmSlab(p, q, frame, size, cell, edge);
+  cmSlab(p, q, frame, size, cell, edge, lo);
   float rnd = cmHash(cell + 11.7);
   vec2 win = vec2(rnd * 31.0, fract(rnd * 7.7) * 37.0);
   float fine = 1.0 - smoothstep(CM_LIM * 0.3, CM_LIM * 0.5, fa);
@@ -691,6 +762,32 @@ void main() {
   ratio *= 1.0 - 0.18 * (1.0 - smoothstep(0.0, min(0.05, minS * 0.3), edge)) * (1.0 - nib);
   // a crack across some big slabs; the spot of old gum and the rust ring of a table leg belong to a town's floor
   if (minS > 0.35) {
+#ifdef CM_FISSURE
+    if (frame < 1.5 && vV.z > -1.5 && cmHash(cell + 23.9) < 0.08) {
+      // a slab breaks once, from joint to joint: the line the paving's shader draws (wearpave), with its broken edge and a lit lip
+      // here, and the forks that leave it and die out
+      vec2 dn = normalize(vec2(cmHash(cell + 2.2) - 0.5, cmHash(cell + 4.4) - 0.5) + 1e-3);
+      float zt = dot(lo, vec2(-dn.y, dn.x));
+      float z0 = floor(zt / 0.31), z1 = floor(zt / 0.07);
+      float zig = (mix(cmHash(vec2(z0, cell.x)), cmHash(vec2(z0 + 1.0, cell.x)), fract(zt / 0.31)) - 0.5) * 0.13 + (mix(cmHash(vec2(z1, cell.y)), cmHash(vec2(z1 + 1.0, cell.y)), fract(zt / 0.07)) - 0.5) * 0.035;
+      float lv = dot(lo, dn) + (cmHash(cell + 6.6) - 0.5) * minS * 0.4 + zig;
+      float dm = abs(lv);
+      vec2 lq = normalize(frame < 0.5 ? uSunDir.xz + 1e-3 : uSunDir.zx + 1e-3);
+      ratio *= cmFissure(c, uv * 0.39 + win * 0.17, 0.39, (1.0 - smoothstep(0.012, 0.26, dm)) * 0.75, fa, lq, (g.b - 0.5) * 0.002);
+      float aa = fa * 0.7 + 0.0002;
+      float dj = dm + (g.b - 0.5) * 0.0035 + (g.a - 0.3) * 0.0015;
+      float near = 1.0 - smoothstep(0.001, 0.0035, fa);
+      ratio *= 1.0 - 0.42 * near * (1.0 - smoothstep(0.0012 - aa, 0.0012 + aa, dj));
+      ratio *= 1.0 + near * (1.0 - smoothstep(0.0012, 0.0055 + aa, dj)) * clamp(-dot(lq, dn) * sign(lv), -1.0, 1.0) * 0.2;
+    }
+    vec2 gq = uv / 0.55 + rnd;
+    float gr = cmHash(floor(gq) + 41.3);
+    vec2 gc = fract(gq) - 0.2 - 0.6 * vec2(cmHash(floor(gq) + 3.1), cmHash(floor(gq) + 7.7));
+    // gum trodden flat: no two the same shape, paler as it ages, with the grit in it
+    float gs = 0.02 + 0.02 * fract(gr * 9.0);
+    float gum = step(0.86, gr) * (1.0 - smoothstep(gs * 0.7, gs * 1.5, length(gc * vec2(1.0, 0.75 + 0.5 * fract(gr * 5.0))) + (g.b - 0.5) * 0.03 + (c.a - 0.5) * 0.05));
+    ratio *= 1.0 - gum * (0.34 - 0.2 * fract(gr * 17.0)) * (0.75 + 0.5 * g.b);
+#else
     float dist = c.r * 0.04;
     float crack = step(0.82, fract(rnd * 19.3)) * smoothstep(0.42, 0.55, c.b) * (1.0 - smoothstep(0.0012, 0.0032 + fa * 0.8, dist));
     ratio *= 1.0 - 0.7 * crack;
@@ -700,6 +797,7 @@ void main() {
     vec2 gc = fract(gq) - 0.2 - 0.6 * vec2(cmHash(gi + 3.1), cmHash(gi + 7.7));
     float gum = step(0.86, gr) * (1.0 - smoothstep(0.022 + 0.02 * fract(gr * 9.0), 0.04 + 0.03 * fract(gr * 9.0), length(gc) + (g.b - 0.5) * 0.03));
     ratio *= 1.0 - 0.34 * gum;
+#endif
   }
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
@@ -740,9 +838,9 @@ ${HARD_HEAD}
 void main() {
   ${HARD_MAIN}
   vec2 size = vPp.xy;
-  vec2 cell;
+  vec2 cell, lo;
   float edge;
-  cmSlab(p, uv, frame, size, cell, edge);
+  cmSlab(p, uv, frame, size, cell, edge, lo);
   float rnd = cmHash(cell + 5.3);
   vec2 fu = vec2(uv.x / 1.2 + rnd * 7.0, uv.y / 0.3 + rnd * 11.0);
   vec4 f = textureGrad(tFibre, fu, gx * vec2(0.833, 3.33), gy * vec2(0.833, 3.33));
@@ -795,6 +893,11 @@ void main() {
 #ifdef CM_RUST
   paint = 1.0;
   wood = 0.0;
+#ifdef CM_WEARRUST
+  // the platform's steps, edges and bricks share a mesh with its railings (these colours are linear, so a warm grey reads as sat 0.2):
+  // pale is mineral, warm brown is brick or timber, and neither rusts
+  if (lum > 0.18 || (lum > 0.06 && col.b <= col.g && col.g < col.r * 0.7)) paint = 0.0;
+#endif
 #endif
   vec3 ratio;
   vec4 c = CMT(tCrack, q * 0.39 + vGr.xz * 3.0, 0.39);
@@ -832,9 +935,21 @@ void main() {
       vec2 s = (g.rg - 0.5) * 0.16;
       ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)));
       ratio *= 1.0 + (f.b - 0.5) * 0.08;
+#ifdef CM_WEARRUST
+      vec3 rc = mix(vec3(0.075, 0.04, 0.024), vec3(0.17, 0.08, 0.038), g.b) * (1.0 - 0.3 * g.a);
+      ratio = mix(ratio, min(rc / col, vec3(3.0)), chip);
+      ratio *= mix(vec3(1.0), vec3(0.92, 0.82, 0.7), smoothstep(0.6, 0.71, fl) * (1.0 - chip));
+      // weeping below the chip, down the face if the face has a down
+      vec2 dq = vec2(G.y, C.y);
+      if (dot(dq, dq) > 0.1) {
+        float flU = CMT(tCrack, (q + normalize(dq) * (0.04 + 0.05 * g.b)) * 1.3 + vGr.xz * 5.0, 1.3).a * 0.62 + c.b * 0.26 + g.b * 0.12;
+        ratio *= mix(vec3(1.0), vec3(0.84, 0.7, 0.56), smoothstep(0.66, 0.76, flU) * (1.0 - chip) * 0.6);
+      }
+#else
       vec3 rc = mix(vec3(0.05, 0.033, 0.021), vec3(0.1, 0.062, 0.036), g.b) * (1.0 - 0.3 * g.a);
       ratio = mix(ratio, min(rc / col, vec3(3.0)), chip);
       ratio *= mix(vec3(1.0), vec3(0.92, 0.82, 0.7), smoothstep(0.6, 0.71, fl) * (1.0 - chip));
+#endif
 #else
       // gloss paint on joinery: the grain and the brush show through; where it has chipped, the primer, then old wood
       vec2 s = (f.rg - 0.5) * 0.1 + (g.rg - 0.5) * 0.05;
@@ -851,8 +966,12 @@ void main() {
       vec2 s = (g.rg - 0.5) * 0.5;
       ratio = vec3(cmLight(N, normalize(N - G * s.x - C * s.y)) * (1.0 + (g.b - 0.5) * 0.2) * (1.0 - 0.3 * g.a));
       ratio *= 0.93 + 0.14 * c.b;
+#ifdef CM_FISSURE
+      ratio *= cmFissure(c, q * 0.39 + vGr.xz * 3.0, 0.39, smoothstep(0.58, 0.74, c.b) * 0.7, fa, normalize(vec2(uSunDir.x * G.x + uSunDir.y * G.y + uSunDir.z * G.z, uSunDir.x * C.x + uSunDir.y * C.y + uSunDir.z * C.z) + 1e-3), (g.b - 0.5) * 0.002);
+#else
       float dist = c.r * 0.04;
       ratio *= 1.0 - 0.5 * smoothstep(0.6, 0.72, c.b) * (1.0 - smoothstep(0.0008, 0.0022 + fa * 0.8, dist));
+#endif
     }
   }
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
@@ -884,8 +1003,12 @@ void main() {
   float gone = wear * smoothstep(0.42, 0.2, s0.r + (0.5 - s0.b) * 0.3);
   ratio *= 1.0 - 0.72 * gone;
   ratio *= 1.0 - 0.3 * g.a;
+#ifdef CM_FISSURE
+  ratio *= cmFissure(c, p * 0.39, 0.39, smoothstep(0.54, 0.74, c.b), fa, normalize(uSunDir.xz + 1e-3), (g.b - 0.5) * 0.003);
+#else
   float dist = c.r * 0.04;
   ratio *= 1.0 - 0.5 * smoothstep(0.56, 0.72, c.b) * (1.0 - smoothstep(0.0008, 0.002 + fa * 0.8, dist));
+#endif
   gl_FragColor = vec4(max(mix(vec3(1.0), ratio, k), vec3(0.0)), 1.0);
 }
 `;
@@ -905,13 +1028,18 @@ void main() {
   vec4 g = CMT(tGrain, p * 1.667, 1.667);
   // the ripples run across the wind and wander; trampled where people go
   float trod = smoothstep(0.42, 0.64, c.b);
-  vec2 rq = p + (c.gb - 0.5) * 1.6;
+#ifdef CM_FISSURE
+  vec2 cj = c.ba;
+#else
+  vec2 cj = c.gb;
+#endif
+  vec2 rq = p + (cj - 0.5) * 1.6;
   float ph = dot(rq, vec2(0.86, 0.5)) * 7.5 + g.b * 1.4;
   float rip = cos(ph) * (1.0 - trod);
   // the grain, in two sizes: sand is not one colour
   vec2 sl = (g.rg - 0.5) * 0.9 + vec2(0.86, 0.5) * rip * 0.16;
   // dimples of old footprints
-  sl += (c.gb - 0.5) * 0.35 * trod;
+  sl += (cj - 0.5) * 0.35 * trod;
   vec3 ratio = vec3(cmLight(N, normalize(N - vec3(sl.x, 0.0, sl.y))));
   ratio *= 1.0 + (g.b - 0.5) * 0.14;
   if (fine > 0.0) {
