@@ -14,6 +14,7 @@ import { C, person, railing } from './parts';
 import type { Env } from './env';
 import { drawText, signQuad } from './signs';
 import { boxHunt } from '../../core/boxhunt';
+import { bugOn } from '../../core/sweepbugs';
 
 export interface CraneTargets {
   /** pick-up / set-down spots (world) with the surface height the load rests on */
@@ -397,6 +398,15 @@ export function genConstruction(env: Env, lot: Lot): CraneTargets {
     cab(2.6, '#f1efe8');
     K.box(M('#8f9aa3', PAT.PLAIN, 0.5, 0.6), 0.8, 0.08, 2.4, cx + 1.65, 2.55, cz + 1.4);
     for (let i = 0; i < 8; i++) K.box(M('#8f9aa3', PAT.PLAIN, 0.5, 0.6), 0.8, 0.06, 0.28, cx + 1.65, 0.32 * i, cz - 1.5 + i * 0.3);
+    // stringers, a handrail, and legs under the landing: the treads and the landing hung in the air (?nocabinstair)
+    if (bugOn('cabinstair')) {
+      const steel = M('#6d767d', PAT.PLAIN, 0.5, 0.6);
+      for (const dx of [-0.42, 0.42]) K.beam(steel, [cx + 1.65 + dx, 0, cz - 1.6], [cx + 1.65 + dx, 2.5, cz + 0.72], 0.05);
+      K.beam(steel, [cx + 2.07, 0.95, cz - 1.6], [cx + 2.07, 3.45, cz + 0.72], 0.022);
+      K.beam(steel, [cx + 2.07, 0, cz - 1.6], [cx + 2.07, 0.95, cz - 1.6], 0.022);
+      K.beam(steel, [cx + 2.07, 2.5, cz + 0.72], [cx + 2.07, 3.45, cz + 0.72], 0.022);
+      for (const z of [cz + 0.28, cz + 2.52]) K.box(steel, 0.08, 2.55, 0.08, cx + 2.0, 0, z);
+    }
     const sign = env.atlas.add(256, 48, (g, w, h) => {
       g.fillStyle = '#ffd21f';
       g.fillRect(0, 0, w, h);

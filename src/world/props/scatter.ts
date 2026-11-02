@@ -19,6 +19,7 @@ import { OCC, type OccupancyGrid } from '../../core/occupancy';
 import type { Rect } from '../../core/geom';
 import { hashString } from '../../core/rng';
 import { FreeGrid } from './gardenPlan';
+import { bugOn } from '../../core/sweepbugs';
 
 export type ScatterKind =
   | 'cafe'
@@ -384,7 +385,8 @@ export function planScatter(inp: ScatterInputs): ScatterItem[] {
           // clock post at the corner nearest the entrance, then rows of bike parking
           put(Z, 'clock', r.x0 + 2.2, r.z1 - 2.2, 0, 0.3);
           // back-to-back rack pairs with an aisle between them
-          for (const dz of [2.0, 4.0, 8.6, 10.6])
+          // (2.3 m apart: at 2 m the wheels of the facing rows ran through each other. ?norackrows)
+          for (const dz of bugOn('rackrows') ? [2.0, 4.3, 8.6, 10.9] : [2.0, 4.0, 8.6, 10.6])
             for (let x = r.x0 + 4.4; x < r.x1 - 2.0; x += 3.0) put(Z, 'bikeRack', x, r.z0 + dz, dz === 2.0 || dz === 8.6 ? Math.PI : 0, 0.0);
           for (let x = r.x0 + 2.0; x < r.x1 - 1; x += 3.4) put(Z, 'planter', x, r.z1 - 1.3, 0, 0.3);
         } else {

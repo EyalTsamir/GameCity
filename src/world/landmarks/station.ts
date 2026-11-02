@@ -15,6 +15,7 @@ import { drawText, signQuad } from './signs';
 import { boxHunt } from '../../core/boxhunt';
 import { lmDetail } from '../../core/lmdetail';
 import { buildStationRoom } from './stationRoom';
+import { bugOn } from '../../core/sweepbugs';
 
 /** Glazed segmental barrel vault spanning x0..x1 along z0..z1. */
 export function barrelVault(K: Kit, glass: Mat, rib: Mat, x0: number, x1: number, z0: number, z1: number, ySpring: number, rise: number, segs: number, ribEvery: number): void {
@@ -366,7 +367,13 @@ export function genStation(env: Env, lot: Lot): void {
       [doorX - 1.7, 4.25, zW],
     ]);
     K.box(iron, 3.4, 0.2, 0.08, doorX, 3.78, HD + 0.97);
-    for (const dx of [-1.6, 1.6]) K.beam(iron, [doorX + dx, 3.0, zW], [doorX + dx, 3.9, HD + 0.95], 0.06);
+    // tie rods up to the wall over the arches: as props from below they ran through the lanterns and across the windows (?nocanopyties)
+    if (bugOn('canopyties'))
+      for (const dx of [-1.6, 1.6]) {
+        K.beam(iron, [doorX + dx, 5.05, zW + 0.02], [doorX + dx, 3.98, HD + 0.95], 0.04);
+        K.box(iron, 0.14, 0.2, 0.03, doorX + dx, 4.95, zW + 0.015);
+      }
+    else for (const dx of [-1.6, 1.6]) K.beam(iron, [doorX + dx, 3.0, zW], [doorX + dx, 3.9, HD + 0.95], 0.06);
   }
 
   // ── end pavilions

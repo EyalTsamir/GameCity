@@ -14,6 +14,7 @@ import type { CityContext } from '../../core/context';
 import type { Rng } from '../../core/rng';
 import { makeLight, sampleLight, smooth } from './shared';
 import { windAt } from '../../core/wind';
+import { bugOn } from '../../core/sweepbugs';
 
 export interface SmokeEmitterOptions {
   /** World position of the emission point (polled every sim step). Return `false` to pause emission. */
@@ -441,6 +442,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
 
   const tmp = new THREE.Vector3();
   const emitOpts = { size: 1, life: 1, rise: 1, color: new THREE.Color(), glow: 0, opacity: 1 };
+  const plumeGaps = bugOn('plumegaps');
 
   const service: SmokeService = {
     addEmitter(opts) {
@@ -560,6 +562,16 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
         emitOpts.rise = e.rise;
         emitOpts.glow = e.glow;
         emitOpts.opacity = e.opacity * (1 - 0.4 * (1 - e.lod));
+        // (?noplumegaps) what the wind leaves between two puffs against how wide they are by mid-life: past that a plume
+        // is a dotted line of blobs across the sky (sweep), so wider and thinner, same number of puffs
+        if (plumeGaps) {
+          const gap = (Math.hypot(wind.x, wind.y) * 3.1 + 0.5) / Math.max(e.rate * e.lod * rateScale * dens, 1e-3);
+          const sparse = Math.min(5, gap / (3.9 * emitOpts.size));
+          if (sparse > 1) {
+            emitOpts.size *= Math.pow(sparse, 0.6);
+            emitOpts.opacity *= Math.pow(sparse, -0.5);
+          }
+        }
         emitOpts.color.copy(e.color);
         for (let k = 0; k < n; k++) {
           const f = (k + rng.next()) / n;

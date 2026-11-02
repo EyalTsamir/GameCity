@@ -9,6 +9,7 @@ import { Geo, type V3 } from '../rail/geo';
 import { BT, HC, HC_STEP, JIB_HEAD, JIB_TACK } from './material';
 import { QUAY_X, WATER_LEVEL } from '../../core/constants';
 import { actorsOff, CREW, crewBuild } from '../pedestrians/actorDefs';
+import { bugOn } from '../../core/sweepbugs';
 
 const _fp = new THREE.Vector3();
 
@@ -1514,6 +1515,11 @@ function fishingBoat(g: Geo): void {
   g.push().at(1.3, D + 0.95, -0.1).rotX(Math.PI / 2);
   g.cyl(0, -0.15, 0, 0.2, 0.2, 0.3, 10, 3);
   g.pop();
+  // the hauling line, drum to sheave and down over the side: without it the davit was a bent pole with no purpose (?nodavitline)
+  if (bugOn('davitline')) {
+    rope(g, [1.3, D + 1.14, -0.05], [1.9, D + 1.72, 0.2], 0.02, 0.011, '#c9bd9a');
+    rope(g, [2.07, D + 1.82, 0.2], [2.07, D + 0.35, 0.2], 0.01, 0.011, '#c9bd9a');
+  }
   // creels stacked on the aft deck (fleet of pots), with their back rope
   let k = 0;
   for (let row = 0; row < 3; row++)

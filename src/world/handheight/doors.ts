@@ -6,6 +6,7 @@
 import type { BuildingKind, DistrictKind } from '../../core/plan';
 import type { HandDoor, HandSpot, DoorLamp } from '../buildings/anchors';
 import type { HandSink } from './sink';
+import { bugOn } from '../../core/sweepbugs';
 
 export interface DoorPlace {
   kind: BuildingKind;
@@ -304,8 +305,11 @@ export function glassDoor(s: HandSink, d: HandDoor, _p: DoorPlace): void {
     for (const side of [1, -1]) {
       const o = oL + side * 0.046;
       steel().tube([u, y0 - 0.05, o, u, y1 + 0.05, o], 0.0135, 12);
-      steel(0.9).tube([u, y0, oL, u, y0, o], 0.0075, 8);
-      steel(0.9).tube([u, y1, oL, u, y1, o], 0.0075, 8);
+      // stand-offs you can see, on a boss on the glass: thinner, the bars looked unattached (?nodoorbars)
+      const so = bugOn('doorbars') ? 0.012 : 0.0075;
+      steel(0.9).tube([u, y0, oL, u, y0, o], so, 8);
+      steel(0.9).tube([u, y1, oL, u, y1, o], so, 8);
+      if (bugOn('doorbars') && side > 0) for (const y of [y0, y1]) steel(0.86).disc(u, y, oL, oL + 0.004, 0.024, 12, 0.3);
     }
   }
   // closer over the leaf: a body and an arm

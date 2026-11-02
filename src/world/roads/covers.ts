@@ -14,6 +14,7 @@ import type { P2, Rect } from '../../core/geom';
 import { OCC } from '../../core/occupancy';
 import { hash01 } from '../../core/rng';
 import { SIDEWALK_Y } from '../../core/constants';
+import { bugOn } from '../../core/sweepbugs';
 import type { MeshBuilder } from './builder';
 import { Y } from './streets';
 import { HM, surf, band, coverRect } from './surfaces';
@@ -129,6 +130,7 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
   const inRect = (r: Rect | undefined, x: number, z: number, m = 0) => !!r && x > r.x0 - m && x < r.x1 + m && z > r.z0 - m && z < r.z1 + m;
   // parking lots inside a block meet the lawn at a concrete edging kerb (audit: asphalt ran straight into the grass)
   const parkKerbs = !ctx.debug.params.has('noparkkerb');
+  const stepCourse = bugOn('stepcourse');
 
   for (const f of plan.features) {
     if (f.kind === 'fountain') info.radial.push({ x: f.x, z: f.z, r: 11.5 });
@@ -204,6 +206,12 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
             if (lower(i - 1, jj)) skirtRun(xs[i], zs[jj], xs[i], zs[jj + 1], -1, 0, i === 0);
             if (lower(i1 + 1, jj)) skirtRun(xs[i1 + 1], zs[jj], xs[i1 + 1], zs[jj + 1], 1, 0, i1 === nx - 1);
           }
+          if (stepCourse && c.mat === HM.plaza) {
+            if (j === 0) for (let k = i; k <= i1; k++) lipCourse(xs[k], zs[0], xs[k + 1], zs[0], 0, -1);
+            if (j1 === nz - 1) for (let k = i; k <= i1; k++) lipCourse(xs[k], zs[nz], xs[k + 1], zs[nz], 0, 1);
+            if (i === 0) for (let jj = j; jj <= j1; jj++) lipCourse(xs[0], zs[jj], xs[0], zs[jj + 1], -1, 0);
+            if (i1 === nx - 1) for (let jj = j; jj <= j1; jj++) lipCourse(xs[nx], zs[jj], xs[nx], zs[jj + 1], 1, 0);
+          }
           if (parkKerbs && c.key === 'parking') {
             for (let k = i; k <= i1; k++) {
               if (j > 0 && lower(k, j - 1)) edgeKerb(xs[k], zs[j], xs[k + 1], zs[j], 0, -1);
@@ -271,6 +279,38 @@ export function buildCovers(ctx: CityContext, A: MeshBuilder, H: MeshBuilder): {
     H.rect(Math.min(x0, x1 + ox), Math.min(z0, z1 + oz), Math.max(x0, x1 + ox), Math.max(z0, z1 + oz), top);
     H.wall(x0 + ox, z0 + oz, x1 + ox, z1 + oz, Y.ground - 0.03, top, nx, nz);
     H.wall(x0, z0, x1, z1, Y.cover, top, -nx, -nz);
+  }
+
+  /**
+   * (?nostepcourse) a block's paved cover lies 13 cm below the sidewalk round it, and seen from the sidewalk the slabs just
+   * stopped in a straight cut with a square of other paving beyond (sweep: "two layouts cut into each other"). A course of
+   * granite setts along the top of that step, on the sidewalk side; (nx, nz) points out of the block, away from the cover.
+   */
+  function lipCourse(x0: number, z0: number, x1: number, z1: number, nx: number, nz: number): void {
+    const L = Math.hypot(x1 - x0, z1 - z0);
+    if (L < 1e-3) return;
+    const W = 0.16,
+      top = SIDEWALK_Y + 0.012;
+    const n = Math.max(1, Math.ceil(L / 0.5));
+    let run = -1;
+    const emit = (a: number, b: number) => {
+      const ax = x0 + ((x1 - x0) * a) / n,
+        az = z0 + ((z1 - z0) * a) / n,
+        bx = x0 + ((x1 - x0) * b) / n,
+        bz = z0 + ((z1 - z0) * b) / n;
+      surf(H, HM.setts, 0, 9, 0);
+      H.rect(Math.min(ax, bx + nx * W), Math.min(az, bz + nz * W), Math.max(ax, bx + nx * W), Math.max(az, bz + nz * W), top);
+      H.wall(ax, az, bx, bz, Y.cover, top, -nx, -nz);
+    };
+    for (let k = 0; k <= n; k++) {
+      const t = (k + 0.5) / n;
+      const on = k < n && occ.has(x0 + (x1 - x0) * t + nx * 0.3, z0 + (z1 - z0) * t + nz * 0.3, OCC.SIDEWALK);
+      if (on && run < 0) run = k;
+      if (!on && run >= 0) {
+        emit(run, k);
+        run = -1;
+      }
+    }
   }
 
   function skirtRun(x0: number, z0: number, x1: number, z1: number, nx: number, nz: number, blockEdge: boolean): void {

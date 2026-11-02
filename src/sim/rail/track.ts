@@ -9,6 +9,7 @@ import type { V3 } from './geo';
 import { Geo } from './geo';
 import { K } from './staticMaterial';
 import { GAUGE, PANEL_TOP, RAIL_H, BALLAST_DROP, XING_HALF, XING_RAMP, WIRE_H, RAIL_TOP, type RailProfile } from './profile';
+import { bugOn } from '../../core/sweepbugs';
 
 export interface SignalDef {
   /** 0 west home (eastbound), 1 east home (westbound), 2 west starter (westbound), 3 east starter (eastbound) */
@@ -205,6 +206,15 @@ export function buildTrack(g: Geo, gt: Geo, gd: Geo, plan: CityPlan, prof: RailP
         g.kind(K.CONCRETE).color(COL.panel, j);
         g.box((pa + pb) / 2, PANEL_TOP / 2 - 0.004, (za + zb) / 2, pb - pa - 0.03, PANEL_TOP + 0.008, zb - za, 8);
       }
+    }
+    // the road comes up to the deck on a tarmac ramp: a 5 cm step faced the traffic with nothing to carry a wheel up it (?noxingramp)
+    if (bugOn('xingramp')) {
+      g.kind(K.PLAIN).color('#3d3f42');
+      const z0 = 2.45,
+        z1 = 3.1,
+        lo = 0.006;
+      g.quad([xa, lo, zc + z1], [xb, lo, zc + z1], [xb, PANEL_TOP, zc + z0], [xa, PANEL_TOP, zc + z0]);
+      g.quad([xa, PANEL_TOP, zc - z0], [xb, PANEL_TOP, zc - z0], [xb, lo, zc - z1], [xa, lo, zc - z1]);
     }
     // dark flangeways (just inside each rail)
     g.kind(K.PLAIN).color(COL.flange);

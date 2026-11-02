@@ -11,6 +11,7 @@ import * as THREE from 'three';
 import { Rng, hash01 } from '../../core/rng';
 import { InstBuf, pushCard, pushWood, CARD_SPECS, WOOD_SPECS, STILL, type PlantRef, type Sway, type CardIn } from './foliage';
 import { getLeafAtlas, type LeafTile, type UvRect } from './atlas';
+import { bugOn } from '../../core/sweepbugs';
 
 export type Form = 'dome' | 'oval' | 'spread' | 'irregular' | 'umbrella' | 'vase' | 'column' | 'weep' | 'cone' | 'palm' | 'fan' | 'bush' | 'hedge' | 'fern';
 
@@ -619,7 +620,10 @@ function coneStruct(st: Struct, rng: Rng): void {
       const tip: V3 = [ax[0] + Math.cos(a) * L, yy + Math.sin(pitch) * L - (1 - f) * 0.12 * L, ax[2] + Math.sin(a) * L];
       const d = norm([tip[0] - ax[0], tip[1] - yy, tip[2] - ax[2]]);
       const w1 = Math.min(1, L / 2.5);
-      st.segs.push({ a: [ax[0], yy, ax[2]], b: tip, ra: Math.max(0.012, r0 * 0.25 * prof + 0.012), rb: 0.008, sa: { ph1: lph, w1: 0, ph2: 0, w2: 0 }, sb: { ph1: lph, w1, ph2: 0, w2: 0 }, near: true, aoA: 0.4, aoB: 0.8 });
+      // the wood stops at the last spray: run on to the tip it stuck out of the crown as a bare stick (?noconifertips)
+      const woodN = Math.max(1, Math.round(L / (st.cardHalf * 1.3)));
+      const woodEnd = bugOn('conifertips') ? lerp3([ax[0], yy, ax[2]], tip, (woodN - 0.3) / (woodN + 0.2)) : tip;
+      st.segs.push({ a: [ax[0], yy, ax[2]], b: woodEnd, ra: Math.max(0.012, r0 * 0.25 * prof + 0.012), rb: 0.008, sa: { ph1: lph, w1: 0, ph2: 0, w2: 0 }, sb: { ph1: lph, w1, ph2: 0, w2: 0 }, near: true, aoA: 0.4, aoB: 0.8 });
       const nt = Math.max(1, Math.round(L / (st.cardHalf * 1.3)));
       for (let q = 0; q < nt; q++) {
         const ff = (q + 0.7) / (nt + 0.2);

@@ -21,6 +21,7 @@ import { WIN, PROF, WALLPAT, ROOFPAT, FRAME, GLASS, LIGHT_MODE, shopType } from 
 import { letterSign, boardSign, clockFace, noticeBoard } from './signs';
 import { partitionSide } from './oldtown';
 import { MASS, massRng, turret } from './massing';
+import { bugOn } from '../../core/sweepbugs';
 
 const PREV: Side[] = [LEFT, FRONT, RIGHT, BACK];
 
@@ -171,6 +172,7 @@ function grand(g: Gen): void {
     sideBox(t, sgF, u - 0.06, u + 0.06, -0.6, -0.48, H, H + 4.6);
   }
   sideBox(t, sgF, sgF.L / 2 - wS / 2, sgF.L / 2 + wS / 2, -0.6, -0.5, H + 1.6, H + 1.7);
+  if (bugOn('signframe')) sideBox(t, sgF, sgF.L / 2 - wS / 2, sgF.L / 2 + wS / 2, -0.6, -0.5, H + 4.25, H + 4.35);
   signOnSide(g, sgF, sgF.L / 2 - wS / 2, sgF.L / 2 + wS / 2, -0.42, H + 1.7, H + 4.7, r);
   // flags over the entrance
   void rng;
@@ -381,8 +383,12 @@ function seaview(g: Gen): void {
   setCol(t, col('#3a3f44'));
   for (let k = 0; k <= 4; k++) {
     const u = sgF.L / 2 - wS / 2 + (wS * k) / 4;
-    sideBox(t, sgF, u - 0.05, u + 0.05, -0.4, -0.3, H, yS + 2.4);
+    // (?nosignframe: the poles only, a hand's width behind the letters and past their top, with nothing to carry them)
+    if (bugOn('signframe')) sideBox(t, sgF, u - 0.05, u + 0.05, -0.54, -0.44, H, yS + 2.25);
+    else sideBox(t, sgF, u - 0.05, u + 0.05, -0.4, -0.3, H, yS + 2.4);
   }
+  // letters are carried by rails, and the rails by the poles
+  if (bugOn('signframe')) for (const y of [yS + 0.4, yS + 2.05]) sideBox(t, sgF, sgF.L / 2 - wS / 2 + 0.05, sgF.L / 2 + wS / 2 - 0.05, -0.44, -0.36, y, y + 0.08);
   signOnSide(g, sgF, sgF.L / 2 - wS / 2, sgF.L / 2 + wS / 2, -0.22, yS, yS + 2.6, r);
   chimney(g, body.x0 + 8, (body.z0 + body.z1) / 2, H + 1, H + 5.4, 0.8, 1.2, col('#e8e2d6'));
   chimney(g, body.x1 - 8, (body.z0 + body.z1) / 2, H + 1, H + 5.4, 0.8, 1.2, col('#e8e2d6'));

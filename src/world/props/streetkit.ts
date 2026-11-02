@@ -13,6 +13,7 @@ import type { Printer } from './print';
 import { markProp } from '../lettering/spots';
 import { boltZ, cbox, lathe } from './shapes';
 import { wearOn } from '../../core/sweepwear';
+import { bugOn } from '../../core/sweepbugs';
 
 type Draw = (g: CanvasRenderingContext2D, w: number, h: number) => void;
 const SANS = 'Arial, Helvetica, sans-serif';
@@ -467,7 +468,8 @@ export function posterColumn(ks: Kit, k: Kit, kd: Kit, rng: Rng, printer: Printe
     const y0 = 0.46 + rng.range(0, 0.14),
       hh = rng.range(1.5, 1.95);
     for (const s of [0, 1] as const) {
-      const a = ((i + s) / F) * Math.PI * 2 + Math.PI / F;
+      // (on a facet's middle: half a step round, each bill sat on a corner of the drum and the concrete came through it. ?nobillfacet)
+      const a = ((i + s) / F) * Math.PI * 2 + (bugOn('billfacet') ? 0 : Math.PI / F);
       sh.push().local(0, 0, 0, 0, a, 0);
       printer.quad(sh, `bill:${bill}:${s}`, 0, y0 + hh / 2, apo, facetW, hh, 56, 200, posterDraw(bill, s === 0 ? 1 : 2));
       markProp(sh, 'bill', 0, y0 + hh / 2, apo, facetW, hh, seed + i, s);

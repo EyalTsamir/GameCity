@@ -37,6 +37,7 @@ import { buildMooring, buildQuayEdge, buildShip, mobileShipPos, setShipDetail, S
 import { addContainer, CH, CW, fillYard, L20, pickLook, setContainerDetail, yardRows } from './harbor/containers';
 import { buildHarborFloodlights } from './lamps/harborLights';
 import { addLampLights } from '../core/lampLight';
+import { bugOn } from '../core/sweepbugs';
 
 export interface HarborService {
   /** current crane states (world): gantry z, trolley x, spreader bottom y, busy phase */
@@ -159,7 +160,9 @@ export default function create(ctx: CityContext): CityModule {
     });
   }
   if (ship && shipF) {
-    const near = (z: number) => edge.bollards.reduce((best, b) => (Math.abs(b - z) < Math.abs(best - z) ? b : best), edge.bollards[0]);
+    // (not the fish quay's bollards north of z -112: a hawser from there ran over the crabber and the tender. ?nohawserclear)
+    const hawser = bugOn('hawserclear') ? edge.bollards.filter((b) => b >= -112) : edge.bollards;
+    const near = (z: number) => hawser.reduce((best, b) => (Math.abs(b - z) < Math.abs(best - z) ? b : best), hawser[0]);
     // fairleads (local) bow → stern; bollards spread fore and aft of the ship
     const fair: [number, number, number][] = [
       [5.2, SHIP.fcY + 0.6, 33.5],

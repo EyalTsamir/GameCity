@@ -22,6 +22,7 @@ import { MASS, massRng, recordTier, notchPoly, notchCap, crownCornice, roofKit }
 import { towerPlant, roofPlantOn, roofFloor } from './roofplant';
 import { dB } from '../../core/detailbuildings';
 import { realLobby, lobbySpan, groundFit, arcadeSoffit, resetLobbies } from './lobby';
+import { bugOn } from '../../core/sweepbugs';
 
 interface P {
   x: number;
@@ -544,13 +545,15 @@ export function genTower(g: Gen): void {
         // door furniture beside the entrance: intercom / access panel, tenant board, a letter plate
         const iu = u + 1.62;
         setCol(g.trim, col('#b9bfc4'));
-        sideBox(g.trim, sg, iu - 0.11, iu + 0.11, 0, 0.025, 1.18, 1.52);
+        // the panel and the board stand on the pavement: beside the door there is often only glass to hang them on (?nodoorposts)
+        const posts = bugOn('doorposts');
+        sideBox(g.trim, sg, iu - 0.11, iu + 0.11, 0, 0.025, posts ? 0 : 1.18, 1.52);
         setCol(g.trim, col('#1c2024'));
         sideBox(g.trim, sg, iu - 0.06, iu + 0.06, 0.025, 0.03, 1.4, 1.48);
         for (let r = 0; r < 3; r++) for (let c2 = 0; c2 < 2; c2++) sideBox(g.trim, sg, iu - 0.06 + c2 * 0.07, iu - 0.01 + c2 * 0.07, 0.025, 0.033, 1.23 + r * 0.05, 1.265 + r * 0.05);
         if (sg.L - (u + 1.62) > 1.1) {
           setCol(g.trim, col('#15191d'));
-          sideBox(g.trim, sg, iu + 0.3, iu + 0.82, 0, 0.03, 1.05, 1.85);
+          sideBox(g.trim, sg, iu + 0.3, iu + 0.82, 0, 0.03, posts ? 0 : 1.05, 1.85);
           anchors.spot(sg, 'tenants', iu + 0.3, iu + 0.82, 1.05, 1.85, 0.03, { seed: g.seed, num: lot.floors });
           setCol(g.trim, col('#c9ced2'));
           for (let k = 0; k < 7; k++) sideBox(g.trim, sg, iu + 0.36, iu + 0.36 + 0.26 + ((g.seed + k * 5) % 3) * 0.06, 0.03, 0.034, 1.7 - k * 0.085, 1.718 - k * 0.085);

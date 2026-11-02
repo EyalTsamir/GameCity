@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { MOTION_KEEP_GLSL, WIND_GLSL } from '../../core/wind';
 import { globalUniforms } from '../../core/uniforms';
+import { bugOn } from '../../core/sweepbugs';
 import { closeNatureOn } from '../../core/closenature';
 import type { UnderPlant } from '../closenature/sprigs';
 import { hash2i } from './noise';
@@ -667,6 +668,7 @@ export class RowSink {
 /** plant strips sway and sink into the ground far away; alpha threshold eases with the mip so rows don't thin out */
 export function rowMaterial(atlas: THREE.Texture, uniforms: Record<string, THREE.IUniform>, fog: boolean): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ map: atlas, vertexColors: true, roughness: 0.92, metalness: 0, fog, side: THREE.DoubleSide, alphaTest: 0.5 });
+  const topsLow = bugOn('croptops');
   mat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = uniforms.uTime;
     sh.uniforms.uWind = uniforms.uWind;
@@ -683,11 +685,13 @@ uniform vec2 uWind;
 uniform vec3 uNearEye;
 uniform float uNearLens;
 ${WIND_GLSL}
-${MOTION_KEEP_GLSL}`,
+${MOTION_KEEP_GLSL}
+${topsLow ? 'varying vec3 vRowTop;' : ''}`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
+${topsLow ? 'vRowTop = aH > 0.0 && normal.y > 0.99 ? position : vec3(0.0, -1e4, 0.0);' : ''}
 if (aH > 0.0) {
   float d = distance(position.xz, cameraPosition.xz);
   float ah = aH;
@@ -700,12 +704,15 @@ if (aH > 0.0) {
 }`,
       );
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform float uNight;')
+      .replace('#include <common>', `#include <common>\nuniform float uNight;\n${topsLow ? 'varying vec3 vRowTop;' : ''}`)
       .replace('#include <lights_fragment_end>', `#include <lights_fragment_end>\n${moonLift()}`)
       .replace(
         '#include <alphatest_fragment>',
+        // (?nocroptops) the flat strip over a row is a canopy for a view from above: from inside the field or level with it,
+        // it was the top of a stretched picture hanging in the air (sweep: sunflower heads and vine leaves as horizontal slabs)
         // a distant strip's coverage falls with the mip chain: ease the threshold with the footprint
-        `{ vec2 tx = vec2(dFdx(vMapUv.x), dFdy(vMapUv.x)) * ${BW.toFixed(1)};
+        `${topsLow ? 'if (vRowTop.y > -9000.0 && cameraPosition.y - vRowTop.y < 0.07 * distance(vRowTop.xz, cameraPosition.xz)) discard;' : ''}
+{ vec2 tx = vec2(dFdx(vMapUv.x), dFdy(vMapUv.x)) * ${BW.toFixed(1)};
   float fpx = dot(tx, tx);
   if (diffuseColor.a < 0.5 - 0.34 * smoothstep(1.0, 30.0, fpx)) discard; diffuseColor.a = 1.0; }`,
       )
@@ -717,7 +724,7 @@ normal *= faceDirection;
 #endif`,
       );
   };
-  mat.customProgramCacheKey = () => 'th-landrows-v3';
+  mat.customProgramCacheKey = () => 'th-landrows-v3' + (topsLow ? 't' : '');
   return mat;
 }
 

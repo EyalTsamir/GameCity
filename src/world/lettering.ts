@@ -11,6 +11,7 @@ import { globalUniforms } from '../core/uniforms';
 import { closeText, textOn } from '../core/closetext';
 import { OCC } from '../core/occupancy';
 import { SIDEWALK_Y } from '../core/constants';
+import { bugOn } from '../core/sweepbugs';
 import { patchLampMaterial } from './lamps/integrate';
 import type { BuildingsService, LetterSpot } from './buildings/anchors';
 import { XS, ZS } from '../core/constants';
@@ -125,6 +126,9 @@ export default function create(ctx: CityContext): CityModule {
   const material = letterMaterial(atlas, uHour);
   const grids = RINGS.map(() => new Map<number, Item[]>());
   let items = 0;
+
+  /** boards standing clear of any wall (centre of the plane, its right, size): what they hide (see the blocker layer below) */
+  const standingBoards: { x: number; y: number; z: number; tx: number; tz: number; w: number; h: number }[] = [];
 
   const put = (tier: Tier, x: number, z: number, draw: Draw): void => {
     const size = RINGS[tier].cell;
@@ -587,6 +591,7 @@ export default function create(ctx: CityContext): CityModule {
       const fx = x,
         fz = z;
       put(1, fx, fz, (s) => paint.estateBoard(s, fx, y, fz, v.x, v.z, lot.seed));
+      standingBoards.push({ x: fx, y: y + 1.45, z: fz, tx: v.z, tz: -v.x, w: 0.72, h: 0.56 });
       marks.push(['agent', fx, y + 1.7, fz, v.x, v.z]);
     }
     ctx.plan.benches.forEach((b, i) => {
@@ -602,6 +607,7 @@ export default function create(ctx: CityContext): CityModule {
       if (!water && !(occ.get(b.ax, b.az) & OCC.PATH)) return;
       const y = groundAt(x, z);
       for (const tier of [1, 2] as Tier[]) put(tier, x, z, (s) => paint.councilBoard(s, x, y, z, fx, fz, i, water, tier));
+      standingBoards.push({ x, y: y + 1.1, z, tx: fz, tz: -fx, w: 0.62, h: 0.46 });
       marks.push(['council', x, y + 1.3, z, fx, fz]);
     });
   }
@@ -767,6 +773,43 @@ export default function create(ctx: CityContext): CityModule {
       },
     });
   });
+
+  // (?noboardblock) lettering writes no depth, which is right on a wall and wrong on a board with nothing behind it for
+  // metres: the AO and the lens took the wall behind for what was at that pixel, and its edges came through the board
+  // (sweep "SOLD" board). An invisible plane between the board's two faces, drawn after everything solid and before the paint.
+  if (bugOn('boardblock') && standingBoards.length) {
+    const BLOCK_CELL = 16;
+    const blockGrid = new Map<number, typeof standingBoards>();
+    for (const b of standingBoards) {
+      const key = (Math.floor(b.x / BLOCK_CELL) + 32768) * 65536 + (Math.floor(b.z / BLOCK_CELL) + 32768);
+      let list = blockGrid.get(key);
+      if (!list) blockGrid.set(key, (list = []));
+      list.push(b);
+    }
+    near.addMeshes({
+      name: 'letterBlock',
+      radius: 26,
+      cell: BLOCK_CELL,
+      top: 5,
+      material: new THREE.MeshBasicMaterial({ colorWrite: false, transparent: true, depthWrite: true, side: THREE.DoubleSide }),
+      renderOrder: 6,
+      build(c) {
+        const list = blockGrid.get((c.i + 32768) * 65536 + (c.j + 32768));
+        if (!list) return null;
+        const pos = new Float32Array(list.length * 12);
+        const idx = new Uint16Array(list.length * 6);
+        list.forEach((b, i) => {
+          const hw = b.w / 2;
+          pos.set([b.x - b.tx * hw, b.y, b.z - b.tz * hw, b.x + b.tx * hw, b.y, b.z + b.tz * hw, b.x + b.tx * hw, b.y + b.h, b.z + b.tz * hw, b.x - b.tx * hw, b.y + b.h, b.z - b.tz * hw], i * 12);
+          idx.set([i * 4, i * 4 + 1, i * 4 + 2, i * 4, i * 4 + 2, i * 4 + 3], i * 6);
+        });
+        const geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        geo.setIndex(new THREE.BufferAttribute(idx, 1));
+        return geo;
+      },
+    });
+  }
 
   ctx.services.lettering = { props: propSpots, spots, focusOn, marks };
   return {

@@ -17,6 +17,7 @@ import { LIGHT_MODE } from './materials';
 import { letterSign, boardSign } from './signs';
 import { GREEN } from './green';
 import { GLASS_MIRROR_GLSL, glassMirror } from '../water/glassMirror';
+import { bugOn } from '../../core/sweepbugs';
 
 interface Palette {
   floorA: string;
@@ -527,7 +528,9 @@ function revolving(g: Gen, sg: SideGeom, u: number, GL: number, trY: number, fC:
     t.beam(cx, yT - 0.05, cz, ex, yT - 0.05, ez, 0.04, 0.05);
     t.beam(ex, yB, ez, ex, yT, ez, 0.04, 0.04);
     setCol(t, col(P.metal));
-    t.beam(cx + (ex - cx) * 0.55, 1.05, cz + (ez - cz) * 0.55, ex, 1.05, ez, 0.022, 0.022);
+    // the push bar runs the whole wing, post to edge: over clear glass a short one hung in the air (?norevolvebar)
+    const bar0 = bugOn('revolvebar') ? 0 : 0.55;
+    t.beam(cx + (ex - cx) * bar0, 1.05, cz + (ez - cz) * bar0, ex, 1.05, ez, 0.022, 0.022);
   }
   // a glow in the drum head at night
   lightBox(g, cx - 0.3, yT - 0.01, cz - 0.3, cx + 0.3, yT, cz + 0.3, '#fff1d6', LIGHT_MODE.STEADY, 3.5);
