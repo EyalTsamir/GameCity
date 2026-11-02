@@ -1585,7 +1585,7 @@ function buildHair(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
     // close: a gathered root, a band, a full body of locks (lobed section) tapering to an uneven tip
     const pts: [P3, number, number][] = cfg.close
       ? [
-          [add(root, [0, 0.004 * hk, 0.008 * hk]), 0.03 * hk, 0],
+          [add(root, [0, 0.004 * hk, 0.012 * hk]), (sweepPeople('hairledge') ? 0.021 : 0.03) * hk, 0],
           [root, 0.0175 * hk, 0],
           [add(root, [0, -0.008 * hk, -0.006 * hk]), 0.0175 * hk, 0.05],
           [add(root, [0, -0.03 * hk, -0.024 * hk]), 0.03 * hk, 0.18],

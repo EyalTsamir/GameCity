@@ -195,6 +195,7 @@ attribute uvec4 iC1;
 attribute uvec4 iC2;
 //@if CL
 float pedSunLift = 0.12;
+float pedHipKeep = 0.0;
 flat varying vec3 vPedGaze;
 flat varying float vPedBrim;
 flat varying float vPedHatSt;
@@ -307,7 +308,14 @@ ${GLSL_FOOT_R}
   }
   if (b == ${B.THIGH_L} || b == ${B.THIGH_R}) {
     bool left = b == ${B.THIGH_L};
+//@if CL
+    vec3 nHip0 = n;
+//@endif
     pedJoint(p, n, pedHipR(left), pedPivS(${PIV.HIP}, left), w);
+//@if CL
+    // (up in the hip the normal stays with the pelvis's field: swung with the thigh it drew a wandering line where thigh and pelvis cut each other)
+    n = normalize(mix(n, nHip0, pedHipKeep));
+//@endif
   }
 }
 
@@ -352,6 +360,16 @@ void pedSkin(inout vec3 p, inout vec3 n, int bone, float w) {
     op = mix(op, vec3(dot(a, q), dot(b, q), dot(c, q)), w);
     on = mix(on, vec3(dot(a.xyz, n), dot(b.xyz, n), dot(c.xyz, n)), w);
   }
+//@if CL
+  if (pedHipKeep > 0.0) {
+    // (up in the hip the normal stays with the pelvis's field: swung with the thigh it drew a wandering line where thigh and pelvis cut each other)
+    t.x = PED_PARENT[bone];
+    a = texelFetch(uPedPal0, t, 0);
+    b = texelFetch(uPedPal1, t, 0);
+    c = texelFetch(uPedPal2, t, 0);
+    on = normalize(mix(on, vec3(dot(a.xyz, n), dot(b.xyz, n), dot(c.xyz, n)), pedHipKeep));
+  }
+//@endif
   p = op;
   n = on;
 }
@@ -449,6 +467,7 @@ void pedPose(inout vec3 p, inout vec3 n) {
       vec3 hipC = pedPiv(${PIV.HIP});
       vec3 nh = normalize((p - vec3(0.0, hipC.y + 0.05, hipC.z)) * vec3(1.0, 0.12, 1.0));
       n = normalize(mix(n, nh, hipK * 0.96));
+      ${sweepPeople('hipline') ? `if (region == ${R.LEG}) pedHipKeep = hipK;` : ''}
     }
   }
   if (region == ${R.FACE} && aux.y < -0.03 && p.z < 0.0) {
@@ -1550,7 +1569,12 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     stitch += pedBand2(sHem - 0.01, 0.0025, px * 6.0) * step(0.0, sHem);
   } else if (reg > 0.5 && reg < 1.5) {
     // torso: side seams, folds gathering at the waist sides, a pull from the chest, the hem stitching
+#ifdef PED_CLOSE
+    // (a line of stitching where the panels meet, ending at the hem; a stripe four centimetres wide ran on over the trousers)
+    sh *= 1.0 - 0.14 * pedBand2(rn.z, ${sweepPeople('clothes') ? '0.008, px * 5.0' : '0.03, px * 12.0'}) * step(0.2, h) * ${sweepPeople('clothes') ? 'step(0.0, sHem)' : '1.0'};
+#else
     sh *= 1.0 - 0.14 * pedBand2(rn.z, 0.03, px * 12.0) * step(0.2, h);
+#endif
     float wz = exp(-pow((h - 0.36) / 0.12, 2.0));
     float sideK = smoothstep(0.3, 0.9, abs(rn.x));
     sh *= 1.0 - 0.1 * wz * sideK * max(sin(h * 120.0 + rn.z * 5.0), 0.0);
@@ -2208,7 +2232,13 @@ const FRAG_COLOR = /* glsl */ `
       pc = mix(pc, pedFacePaint(pc, vPedFace.xy / vPedFace.z), smoothstep(0.02, 0.7, vPedFace.z));
     }
 #endif
-    else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) pc *= pedStrands(vPedRest);
+    else if (abs(vPedReg - ${R.HAIR}.0) < 0.5 || abs(vPedReg - ${R.BEARD}.0) < 0.5) {
+      pc *= pedStrands(vPedRest);
+#ifdef PED_CLOSE
+      // (a black ponytail or bun has a sky in it too, as the cap does)
+      ${sweepPeople('hairledge') ? 'pc += vec3(0.012, 0.012, 0.014) * (1.0 - smoothstep(0.02, 0.12, dot(pc, vec3(0.33))));' : ''}
+#endif
+    }
 #ifdef PED_CLOSE
     else if (${HC} && abs(vPedReg - ${R.HAT}.0) < 0.5) pc = pedHat(pc);
     else if (vPedHatSt > 9.5 && vPedHatSt < 10.5) pc = pedPaper(pc, vPedFace.xy);
