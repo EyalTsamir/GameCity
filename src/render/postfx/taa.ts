@@ -40,6 +40,8 @@ uniform sampler2D tMovers;
 /** frozen: the last picture shown; how much of this frame counts where something changes */
 uniform sampler2D tLast;
 uniform float uCalm;
+/** a mover's AA */
+uniform float uEdge;
 /** projection's [10], [14]: raw depth to distance */
 uniform vec2 uP;
 /** how much of this frame counts whatever else is true: the camera's own travel */
@@ -87,7 +89,14 @@ void main() {
   }
   // (alpha in history: 0 this frame's sample alone, counting up to 1 over three frames; only a pixel at 1 goes into the settled picture)
   if (texelFetch(tMovers, p, 0).r > 0.5) {
-    gl_FragColor = vec4(cur, 0.0);
+    // no history and no SMAA here: a little of the two neighbours across a hard edge
+    vec3 cw = texelFetchOffset(tInput, p, 0, ivec2(-1, 0)).rgb, ce = texelFetchOffset(tInput, p, 0, ivec2(1, 0)).rgb;
+    vec3 cn = texelFetchOffset(tInput, p, 0, ivec2(0, 1)).rgb, cs = texelFetchOffset(tInput, p, 0, ivec2(0, -1)).rgb;
+    const vec3 L = vec3(0.25, 0.5, 0.25);
+    float lc = dot(cur, L), lw = dot(cw, L), le = dot(ce, L), ln = dot(cn, L), ls = dot(cs, L);
+    float range = max(lc, max(lw, max(le, max(ln, ls)))) - min(lc, min(lw, min(le, min(ln, ls))));
+    vec3 across = abs(lw + le - 2.0 * lc) > abs(ln + ls - 2.0 * lc) ? 0.5 * (cw + ce) : 0.5 * (cn + cs);
+    gl_FragColor = vec4(mix(cur, across, uEdge * smoothstep(0.08, 0.3, range)), 0.0);
     return;
   }
   vec2 huv = vUv;
@@ -284,7 +293,7 @@ export class TemporalAA {
   constructor(
     private camera: THREE.PerspectiveCamera,
     ctx: CityContext,
-    opts: { alpha: number; sharp: number; jitter: number; calm: number; neverRest?: boolean },
+    opts: { alpha: number; sharp: number; jitter: number; calm: number; edge: number; neverRest?: boolean },
   ) {
     this.movers = new MoverMask(ctx);
     this.input = target(4, 4, 'TAA.Input');
@@ -310,6 +319,7 @@ export class TemporalAA {
           tMovers: { value: this.movers.target.texture },
           tLast: { value: null },
           uCalm: { value: opts.calm },
+          uEdge: { value: opts.edge },
           uP: { value: new THREE.Vector2() },
           uFloor: { value: 0 },
           uMode: { value: 0 },
