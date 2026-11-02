@@ -1564,7 +1564,9 @@ function fishingBoat(g: Geo): void {
   }
   // mooring lines (bow line, spring, stern line) from the cleats/bitts to the quay bollards
   const bol = QUAY_BOLLARDS.map((z) => quayLocal(FISH_BERTH, QUAY_X + 0.06, QUAY_TOP + 0.035, z));
-  rope(g, [0.9, D + 0.32, 4.45], bol[0], 0.7, 0.03, '#d6c48e');
+  // (?nobowline) to the next bollard ahead it crossed the tender lying at the ladder from end to end: back to the spring's bollard instead
+  if (bugOn('bowline')) rope(g, [0.9, D + 0.32, 4.45], bol[1], 0.28, 0.03, '#d6c48e');
+  else rope(g, [0.9, D + 0.32, 4.45], bol[0], 0.7, 0.03, '#d6c48e');
   rope(g, [sheerAt(FISH_HULL, -0.3).W - 0.25, D + 0.12, -0.3], bol[1], 0.25, 0.028, '#d6c48e');
   rope(g, [sheerAt(FISH_HULL, -4.4).W - 0.25, D + 0.12, -4.4], bol[2], 0.6, 0.03, '#2f5f9a');
 }

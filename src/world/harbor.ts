@@ -153,7 +153,7 @@ export default function create(ctx: CityContext): CityModule {
       quayX: QX,
       low: ctx.quality.level === 'low',
       lines: [
-        { bollard: new THREE.Vector3(QX - 0.2, 0.12, -138), boat: new THREE.Vector3(QX + 0.06, 0.155, -138) },
+        ...(bugOn('bowline') ? [] : [{ bollard: new THREE.Vector3(QX - 0.2, 0.12, -138), boat: new THREE.Vector3(QX + 0.06, 0.155, -138) }]),
         { bollard: new THREE.Vector3(QX - 0.2, 0.12, -125), boat: new THREE.Vector3(QX + 0.06, 0.155, -125) },
         { bollard: new THREE.Vector3(QX - 0.2, 0.12, -112), boat: new THREE.Vector3(QX + 0.06, 0.155, -112) },
       ],

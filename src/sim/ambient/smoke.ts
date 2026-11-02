@@ -569,7 +569,7 @@ export function createSmoke(ctx: CityContext): SmokeSystem {
           const sparse = Math.min(5, gap / (3.9 * emitOpts.size));
           if (sparse > 1) {
             emitOpts.size *= Math.pow(sparse, 0.6);
-            emitOpts.opacity *= Math.pow(sparse, -0.5);
+            emitOpts.opacity *= Math.pow(sparse, -0.7);
           }
         }
         emitOpts.color.copy(e.color);
