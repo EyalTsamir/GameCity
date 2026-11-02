@@ -3,6 +3,7 @@
 // tip markings that turn with the wind (uSpin.y accumulated on the CPU), and blinking red
 // aviation lights on the nacelles.
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import type { Feature } from '../../core/plan';
 import { ANIM, LM, LMODE, M, PAT } from './builder';
@@ -34,7 +35,34 @@ export function genWindTurbine(env: Env, f: Feature, index: number): void {
   // foundation (sunk into the slope) + door + tower
   K.cyl(M('#b9b4aa', PAT.CONCRETE, 0.9, 0, 0, 0, 0.4), 1.9, 2.0, 0.9, 0, -0.5, 0, 16);
   K.cyl(white, 0.72, 1.18, H - 1.0, 0, 0.4, 0, 18);
-  K.box(M('#7f8b8f', PAT.PLAIN, 0.5, 0.4), 0.7, 1.8, 0.1, 0, 0.4, 1.12);
+  if (shapeOn('shapeturbine')) {
+    // the door someone goes through to climb it: a frame proud of the shell, a leaf with a wheel, hinges, a vent, a notice; a steel stair up from the slab
+    const fr = M('#aeb4b4', PAT.PLAIN, 0.5, 0.4);
+    const leaf = M('#7f8b8f', PAT.PANELS, 0.5, 0.4, 0, 0, 0.3);
+    const iron = M('#3c4144', PAT.PLAIN, 0.5, 0.5);
+    K.box(fr, 0.86, 2.04, 0.1, 0, 1.0, 1.15);
+    K.box(leaf, 0.7, 1.82, 0.1, 0, 1.1, 1.17);
+    for (const y of [1.28, 2.62]) K.box(iron, 0.05, 0.14, 0.04, -0.34, y, 1.23);
+    K.cylX(iron, 0.012, 0.16, 0.24, 1.82, 1.25, 12, Math.PI / 2);
+    K.torus(iron, 0.075, 0.009, 0.24, 1.82, 1.27, 4, 16, Math.PI * 2, 0, 0, 0);
+    K.box(M('#5a6063', PAT.LOUVRE, 0.6, 0.3), 0.36, 0.22, 0.012, 0, 2.42, 1.222);
+    for (let i = 0; i < 4; i++) K.box(iron, 0.34, 0.012, 0.02, 0, 2.45 + i * 0.045, 1.228);
+    K.box(M('#e7c33c', PAT.PLAIN, 0.5), 0.18, 0.16, 0.004, 0, 1.92, 1.222);
+    K.box(iron, 0.02, 0.09, 0.005, 0, 1.955, 1.225);
+    // landing and stair
+    const grate = M('#8d9496', PAT.PLAIN, 0.6, 0.5);
+    K.box(grate, 1.1, 0.04, 0.8, 0, 0.98, 1.72);
+    for (let i = 0; i < 3; i++) K.box(grate, 0.9, 0.035, 0.24, 0, 0.74 - i * 0.24, 2.27 + i * 0.26);
+    for (const sx of [-0.55, 0.55]) {
+      K.rod(iron, [sx, 1.0, 1.36], [sx, 2.0, 1.36], 0.02, 6);
+      K.rod(iron, [sx, 1.0, 2.1], [sx, 2.0, 2.1], 0.02, 6);
+      K.rod(iron, [sx, 2.0, 1.36], [sx, 2.0, 2.1], 0.02, 6);
+      K.rod(iron, [sx, 1.5, 1.36], [sx, 1.5, 2.1], 0.014, 6);
+      K.rod(iron, [sx, 0.4, 2.1], [sx, 1.0, 2.1], 0.024, 6);
+      K.rod(iron, [sx, 2.0, 2.1], [sx, 1.0, 3.0], 0.02, 6);
+      K.beam(iron, [sx * 0.86, 0.95, 2.12], [sx * 0.86, 0.05, 3.02], 0.04, 0.09);
+    }
+  } else K.box(M('#7f8b8f', PAT.PLAIN, 0.5, 0.4), 0.7, 1.8, 0.1, 0, 0.4, 1.12);
   K.cyl(M('#c8cccc', PAT.PLAIN, 0.6), 1.2, 1.2, 0.12, 0, 2.6, 0, 18);
   // nacelle (local +Z = rotor side)
   const ny = H - 0.6;

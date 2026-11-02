@@ -454,8 +454,11 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
     poly(sh, [0.235, 0.91, -0.235, 0.235, 0.91, 0.235, 0.0, 0.95, 0.0], 0.15, 0.99, 0);
     poly(sh, [0.235, 0.91, 0.235, -0.235, 0.91, 0.235, 0.0, 0.95, 0.0], 0, 0.99, 0.15);
     poly(sh, [-0.235, 0.91, 0.235, -0.235, 0.91, -0.235, 0.0, 0.95, 0.0], -0.15, 0.99, 0);
-    k.m('#26292b', 'steel');
-    sh.box(0, 0.952, 0, 0.09, 0.008, 0.09, 0);
+    // the stub plate: a raised rim and its slots (only the top faces of the slots)
+    k.m('#8f959a', 'steel');
+    sh.box(0, 0.952, 0, 0.11, 0.008, 0.11, 0);
+    k.m('#141618', 'steel');
+    for (let i = -2; i <= 2; i++) sh.box(0, 0.9565, i * 0.018, 0.078, 0.001, 0.008, 1 | 4 | 8 | 16 | 32);
     // the hood's turned-down skirt (a 4 cm hemmed lip with a rolled bead) and its shadowed underside, so the
     // lid reads as a pressed cap rather than a slab; a polished hand-worn strip on the front edge
     k.m('#b3babf', 'steel');

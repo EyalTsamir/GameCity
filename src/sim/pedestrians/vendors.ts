@@ -326,8 +326,9 @@ const CHROME = '#c6c9cc';
 const TYRE = '#26282b';
 
 /** a box whose corners were bent or moulded, smooth from one face into the next */
-function rbox(s: Sink, w: number, h: number, d: number, x: number, y: number, z: number, color: string, r: number, seg = 2): void {
-  const g = new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w * 0.49, h * 0.49, d * 0.49));
+function rbox(s: Sink, w: number, h: number, d: number, x: number, y: number, z: number, color: string, r: number, seg = 1): void {
+  // (a sheet or a thin rail has no corners worth 100 triangles)
+  const g = r < 0.008 || Math.min(w, h, d) < 0.02 ? new THREE.BoxGeometry(w, h, d) : new RoundedBoxGeometry(w, h, d, seg, Math.min(r, w * 0.49, h * 0.49, d * 0.49));
   g.translate(x, y + h / 2, z);
   s.add(g, color);
 }
@@ -346,11 +347,11 @@ function bar(s: Sink, a: [number, number, number], b: [number, number, number], 
 
 /** a spoked cart wheel on an axle along x, centre (x, y, z) */
 function wheel(s: Sink, x: number, y: number, z: number, r: number, spokes = 8): void {
-  const t = new THREE.TorusGeometry(r - 0.016, 0.018, 5, 18);
+  const t = new THREE.TorusGeometry(r - 0.016, 0.018, 4, 14);
   t.rotateY(Math.PI / 2);
   t.translate(x, y, z);
   s.add(t, TYRE);
-  const rim = new THREE.TorusGeometry(r - 0.036, 0.008, 4, 18);
+  const rim = new THREE.TorusGeometry(r - 0.036, 0.008, 3, 14);
   rim.rotateY(Math.PI / 2);
   rim.translate(x, y, z);
   s.add(rim, CHROME);

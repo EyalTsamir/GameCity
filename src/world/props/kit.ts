@@ -7,6 +7,7 @@
 // Local frame as in furniture.ts (origin on the ground, +Y up, +Z = the item's front).
 // `k` = the kit the small parts go to, `ks` = the shadow-casting kit for the big silhouettes.
 
+import { shapeOn } from '../../core/sweepshape';
 import { markProp } from '../lettering/spots';
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
@@ -846,6 +847,53 @@ export function skip(ks: Kit, rng: Rng): void {
   }
 }
 
+/** The forklift's bodywork for up close (?noshapeforklift): a pressed shell with soft edges over the far box, a bonnet with its seam and catch, vents, a step, wheel arches, a rounded cast counterweight, hazard stripes. */
+function forkliftBody(kd: Kit, body: string): void {
+  const sh = kd.sh;
+  kd.m(body, 'paint');
+  // shell over the far chassis, and a low bonnet the seat stands on
+  cbox(sh, 0, 0.55, -0.15, 1.07, 0.72, 1.72, 0.045, 1);
+  kd.s.r *= 0.92;
+  kd.s.g *= 0.92;
+  kd.s.b *= 0.92;
+  cbox(sh, 0, 0.92, -0.34, 0.86, 0.05, 0.86, 0.018, 1);
+  // seams, vents, catch, on both flanks
+  kd.m('#141516', 'steel');
+  for (const s of [-1, 1]) {
+    const x = s * 0.5365;
+    sh.box(x, 0.56, -0.15, 0.002, 0.008, 1.5, 0);
+    for (const z of [-0.62, 0.34]) sh.box(x, 0.72, z, 0.002, 0.34, 0.008, 0);
+    for (let i = 0; i < 5; i++) sh.box(x, 0.66 + i * 0.03, -0.32, 0.002, 0.012, 0.42, 0);
+    // arches over the wheels
+    for (const [z, r] of [[0.45, 0.33], [-0.75, 0.28]] as [number, number][]) {
+      kd.m('#141516', 'steel');
+      sh.box(x, r + 0.02, z, 0.003, 0.02, r * 1.9, 0);
+    }
+    // a step with its tread, a grab handle up to the guard
+    kd.m('#34373a', 'steel');
+    sh.box(s * 0.58, 0.3, -0.05, 0.1, 0.022, 0.32, 0);
+    kd.m('#1d1f22', 'rubber');
+    sh.tube(s * 0.46, 1.0, 0.36, s * 0.47, 1.5, 0.36, 0.014, 0.014, 6);
+    // hazard stripes at the back corner
+    for (let i = 0; i < 4; i++) {
+      kd.m(i % 2 ? '#1a1a1a' : '#e8c21f', 'paint');
+      sh.box(x * 1.0005, 0.4, -0.82 + i * 0.05, 0.002, 0.14, 0.05, 0);
+    }
+  }
+  // the cast counterweight: a rounded tail with its lifting eyes, a towing pin
+  kd.m('#3a3d40', 'iron');
+  cbox(sh, 0, 0.62, -1.0, 1.08, 0.84, 0.42, 0.085, 1);
+  cbox(sh, 0, 0.78, -1.2, 0.8, 0.36, 0.1, 0.04, 1);
+  kd.m('#6a6d70', 'steel');
+  for (const s of [-0.28, 0.28]) sh.box(s, 1.045, -1.0, 0.09, 0.02, 0.05, 0);
+  sh.push().local(0, 0.42, -1.225, Math.PI / 2, 0, 0).cyl(0, -0.03, 0, 0.03, 0.03, 0.06, 8, 3).pop();
+  // lamps either side, a number plate between
+  kd.m('#b23a2e', 'plastic');
+  for (const s of [-1, 1]) sh.box(s * 0.33, 0.8, -1.254, 0.12, 0.06, 0.012, 0);
+  kd.m('#e9e6d8', 'plastic');
+  sh.box(0, 0.8, -1.252, 0.22, 0.06, 0.008, 0);
+}
+
 /** Counterbalance forklift (forks towards +Z); `kd` (same frame) = near-only cells for the small box-hunt parts. */
 export function forklift(ks: Kit, rng: Rng, kd?: Kit): void {
   const sh = ks.sh;
@@ -899,6 +947,7 @@ export function forklift(ks: Kit, rng: Rng, kd?: Kit): void {
       ds.cyl(0, x > 0 ? -0.13 : 0.112, 0, 0.06, 0.06, 0.018, 8, x > 0 ? 1 : 2);
       ds.pop();
     }
+  if (kd && shapeOn('shapeforklift')) forkliftBody(kd, body);
   if (YARD) {
     // mast inner channels, carriage bars, LPG bottle on the counterweight, seat back (shadow casters); lift chain,
     // tilt rams, bottle valve, steering column + wheel, lamps on the guard posts (near only)
@@ -1161,9 +1210,147 @@ export function rope(k: Kit, rng: Rng): void {
 
 // ─────────────────────────────────────────────────────────── car parks ──
 
+/** A parking meter up close (?noshapemachines): soft corners, a door with its gap and lock, a hood over the screen, keys, a card slot, a coin slot, the receipt tray, printed instructions, a P on a stalk with a solar panel. */
+function ticketNear(kd: Kit): void {
+  const sh = kd.sh;
+  kd.m('#2f5f9e', 'paint');
+  for (const x of [-1, 1]) for (const z of [-1, 1]) sh.cyl((x * 0.5) / 2, 0.1, (z * 0.36) / 2, 0.022, 0.022, 1.5, 8, 0);
+  kd.m('#22477a', 'paint');
+  // the door's gap, on the front face
+  sh.box(0, 0.1 + 0.42, 0.1815, 0.44, 0.008, 0.002, 0);
+  sh.box(0, 1.47, 0.1815, 0.44, 0.008, 0.002, 0);
+  for (const x of [-0.22, 0.22]) sh.box(x, 0.995, 0.1815, 0.008, 0.95, 0.002, 0);
+  // screen surround and a hood against the sun
+  kd.m('#14161a', 'plastic');
+  sh.box(0, 1.25, 0.1805, 0.36, 0.24, 0.003, 0);
+  kd.m('#22477a', 'paint');
+  sh.push().local(0, 1.385, 0.215, 0.5, 0, 0).box(0, 0, 0, 0.38, 0.012, 0.11, 0).pop();
+  for (const x of [-0.185, 0.185]) sh.box(x, 1.335, 0.222, 0.008, 0.1, 0.075, 0);
+  // the keys, and a big green and red one
+  kd.m('#b9bec2', 'steel');
+  for (let r = 0; r < 4; r++) for (let c = 0; c < 3; c++) sh.box(-0.13 + c * 0.04, 1.085 - r * 0.036, 0.1845, 0.03, 0.026, 0.006, 0);
+  kd.m('#39a84e', 'plastic');
+  sh.box(0.1, 1.07, 0.1845, 0.05, 0.03, 0.007, 0);
+  kd.m('#c2362e', 'plastic');
+  sh.box(0.1, 1.03, 0.1845, 0.05, 0.03, 0.007, 0);
+  // card slot and coin slot on steel plates
+  kd.m('#8f949a', 'steel');
+  sh.box(0.1, 0.97, 0.182, 0.09, 0.04, 0.004, 0);
+  sh.box(-0.09, 0.94, 0.182, 0.06, 0.06, 0.004, 0);
+  kd.m('#0c0d0e', 'rubber');
+  sh.box(0.1, 0.97, 0.1845, 0.066, 0.006, 0.002, 0);
+  sh.box(-0.09, 0.94, 0.1845, 0.006, 0.034, 0.002, 0);
+  // printed tariff, dark lines on a pale plate
+  kd.m('#e9e6d8', 'plastic');
+  sh.box(0, 0.76, 0.1815, 0.3, 0.2, 0.002, 0);
+  kd.m('#2b2e33', 'plastic');
+  for (let i = 0; i < 6; i++) sh.box(-0.02 * (i % 2), 0.83 - i * 0.027, 0.183, 0.24 - (i % 3) * 0.04, 0.008, 0.001, 0);
+  // the tray where the ticket falls, a lock below it
+  kd.m('#14161a', 'plastic');
+  sh.box(0, 0.47, 0.18, 0.2, 0.09, 0.004, 0);
+  kd.m('#8f949a', 'steel');
+  sh.box(0, 0.425, 0.195, 0.21, 0.012, 0.035, 0);
+  sh.cyl(0.17, 0.25, 0.181, 0.014, 0.014, 0.006, 8, 2);
+  // base bolts
+  kd.m('#7c7f80', 'steel');
+  for (const x of [-0.26, 0.26]) for (const z of [-0.17, 0.17]) sh.cyl(x, 0.12, z, 0.012, 0.012, 0.012, 6, 2);
+  // a round P on a stalk, a solar panel on the lid
+  kd.m('#8f949a', 'steel');
+  sh.cyl(-0.16, 1.67, -0.1, 0.014, 0.014, 0.36, 8, 0);
+  sh.push().local(0.08, 1.74, 0, -0.5, 0, 0);
+  sh.box(0, 0, 0, 0.3, 0.012, 0.24, 0);
+  kd.m('#141c33', 'steel');
+  sh.box(0, 0.0075, 0, 0.27, 0.002, 0.21, 0);
+  sh.pop();
+  sh.cyl(0.08, 1.67, 0.03, 0.012, 0.012, 0.06, 6, 0);
+  sh.push().local(-0.16, 2.06, -0.1, Math.PI / 2, 0, 0);
+  kd.m('#2466b8', 'paint');
+  sh.cyl(0, -0.006, 0, 0.09, 0.09, 0.012, 16, 3);
+  kd.m('#f4f2ea', 'paint');
+  sh.box(-0.028, 0.008, 0, 0.022, 0.002, 0.11, 0);
+  sh.box(0.012, 0.008, -0.04, 0.06, 0.002, 0.018, 0);
+  sh.box(0.012, 0.008, -0.006, 0.06, 0.002, 0.018, 0);
+  sh.box(0.04, 0.008, -0.023, 0.018, 0.002, 0.05, 0);
+  sh.pop();
+}
+
+/** A charging post up close (?noshapemachines): soft corners, a plinth with its bolts, a dark fascia with a lit strip, the connector in its holster, the cable looping down and back. */
+function chargerNear(kd: Kit): void {
+  const sh = kd.sh;
+  kd.m('#e8e4da', 'paint');
+  for (const x of [-1, 1]) for (const z of [-1, 1]) sh.cyl((x * 0.36) / 2, 0, (z * 0.26) / 2, 0.025, 0.025, 1.5, 8, 0);
+  sh.cyl(0, 1.5, 0, 0.17, 0.17, 0.015, 16, 2);
+  kd.m('#a9a59c', 'stone');
+  cbox(sh, 0, 0.03, 0, 0.5, 0.06, 0.4, 0.012, 1);
+  kd.m('#7c7f80', 'steel');
+  for (const x of [-0.2, 0.2]) for (const z of [-0.15, 0.15]) sh.cyl(x, 0.06, z, 0.011, 0.011, 0.012, 6, 2);
+  kd.m('#1b1d20', 'plastic');
+  sh.box(0, 0.98, 0.1315, 0.26, 0.26, 0.003, 0);
+  kd.e('#bcd4e0', '#9fffb0', 0.6);
+  sh.box(0, 0.95, 0.1335, 0.18, 0.14, 0.002, 0);
+  kd.e('#3fae5a', '#7dffa0', 1.2);
+  sh.box(0, 1.1, 0.1335, 0.2, 0.012, 0.002, 0);
+  // holster, connector, cable
+  kd.m('#2a2c2e', 'plastic');
+  sh.box(0.1, 0.66, 0.15, 0.1, 0.13, 0.05, 0);
+  kd.m('#1d1f22', 'rubber');
+  sh.tube(0.1, 0.71, 0.17, 0.1, 0.6, 0.21, 0.024, 0.021, 8);
+  sh.tube(0.1, 0.6, 0.21, 0.1, 0.52, 0.23, 0.021, 0.014, 8);
+  const P: [number, number, number][] = [
+    [0.1, 0.52, 0.23],
+    [0.15, 0.32, 0.27],
+    [0.2, 0.12, 0.32],
+    [0.17, 0.04, 0.36],
+    [0.06, 0.045, 0.36],
+    [-0.03, 0.14, 0.3],
+    [-0.08, 0.3, 0.2],
+    [-0.1, 0.42, 0.14],
+  ];
+  for (let i = 0; i + 1 < P.length; i++) sh.tube(P[i][0], P[i][1], P[i][2], P[i + 1][0], P[i + 1][1], P[i + 1][2], 0.014, 0.014, 6);
+  // a maker's plate, a warning label
+  kd.m('#f2c84b', 'plastic');
+  sh.box(0, 0.36, 0.131, 0.1, 0.09, 0.002, 0);
+  kd.m('#1b1d20', 'plastic');
+  sh.box(0, 0.36, 0.1322, 0.012, 0.06, 0.001, 0);
+}
+
+/** A glass bank up close (?noshapemachines): soft upright corners over a kerb frame, a lifting ring on the crown, a rubber flap with slits in the mouth, a label. */
+function bankNear(kd: Kit, x: number, col: string, i: number): void {
+  const sh = kd.sh;
+  kd.m(col, 'plastic');
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) sh.cyl(x + sx * 0.5, 0, sz * 0.625, 0.045, 0.045, 1.3, 8, 0);
+  kd.m('#35383a', 'steel');
+  sh.box(x, 0.03, 0, 1.03, 0.06, 1.28, 1);
+  kd.m('#8f949a', 'steel');
+  sh.tube(x - 0.1, 1.5, 0, x - 0.1, 1.6, 0, 0.012, 0.012, 6);
+  sh.tube(x + 0.1, 1.5, 0, x + 0.1, 1.6, 0, 0.012, 0.012, 6);
+  sh.tube(x - 0.1, 1.6, 0, x - 0.05, 1.65, 0, 0.012, 0.012, 6);
+  sh.tube(x - 0.05, 1.65, 0, x + 0.05, 1.65, 0, 0.012, 0.012, 6);
+  sh.tube(x + 0.05, 1.65, 0, x + 0.1, 1.6, 0, 0.012, 0.012, 6);
+  // the mouth: a raised rim and the flap's slits
+  kd.m('#2a2c2e', 'rubber');
+  sh.push().local(x, 1.0, 0.64, Math.PI / 2, 0, 0);
+  sh.cyl(0, -0.012, 0, 0.16, 0.16, 0.024, 14, 3);
+  kd.m('#0d0e0f', 'rubber');
+  for (let a = 0; a < 4; a++) {
+    sh.push().local(0, 0.014, 0, 0, (a * Math.PI) / 4, 0);
+    sh.box(0, 0, 0, 0.22, 0.002, 0.008, 0);
+    sh.pop();
+  }
+  sh.pop();
+  // a sticker: what goes in here
+  kd.m('#f4f2ea', 'plastic');
+  sh.box(x, 0.56, 0.6265, 0.4, 0.3, 0.002, 0);
+  kd.m(col, 'paint');
+  sh.box(x, 0.65, 0.6278, 0.34, 0.07, 0.001, 0);
+  kd.m('#2b2e33', 'plastic');
+  for (let k = 0; k < 3; k++) sh.box(x, 0.57 - k * 0.04, 0.6278, 0.3 - ((k + i) % 2) * 0.08, 0.012, 0.001, 0);
+}
+
 /** Pay & display machine. Faces +Z. */
-export function ticketMachine(k: Kit): void {
+export function ticketMachine(k: Kit, kd?: Kit): void {
   const sh = k.sh;
+  if (kd) ticketNear(kd);
   k.m('#3a3f44', 'paint');
   sh.box(0, 0.06, 0, 0.6, 0.12, 0.42, 1);
   k.m('#2f5f9e', 'paint');
@@ -1177,8 +1364,9 @@ export function ticketMachine(k: Kit): void {
 }
 
 /** EV charging post. Faces +Z. */
-export function evCharger(k: Kit): void {
+export function evCharger(k: Kit, kd?: Kit): void {
   const sh = k.sh;
+  if (kd) chargerNear(kd);
   k.m('#e8e4da', 'paint');
   sh.box(0, 0.75, 0, 0.36, 1.5, 0.26, 1);
   k.m('#3fae5a', 'paint');
@@ -1186,15 +1374,16 @@ export function evCharger(k: Kit): void {
   k.e('#bcd4e0', '#9fffb0', 0.6);
   sh.box(0, 0.95, 0.131, 0.18, 0.14, 0.01, 0);
   k.m('#1d1f22', 'rubber');
-  sh.tube(0.12, 0.8, 0.14, 0.2, 0.3, 0.3, 0.025, 0.025, 4);
+  if (!kd) sh.tube(0.12, 0.8, 0.14, 0.2, 0.3, 0.3, 0.025, 0.025, 4);
 }
 
 /** Bottle banks: three domed containers (green / white / brown glass) + a paper bank. */
-export function bottleBank(ks: Kit, rng: Rng): void {
+export function bottleBank(ks: Kit, rng: Rng, kd?: Kit): void {
   const sh = ks.sh;
   const cols = ['#3f8f5a', '#e8e4da', '#8a5a3a', '#2f5f9e'];
   for (let i = 0; i < 4; i++) {
     const x = -1.65 + i * 1.1;
+    if (kd) bankNear(kd, x, cols[i], i);
     ks.m(cols[i], 'plastic');
     sh.box(x, 0.65, 0, 1.0, 1.3, 1.25, 1);
     sh.ellipsoid(x, 1.3, 0, 0.5, 0.22, 0.62, 1);

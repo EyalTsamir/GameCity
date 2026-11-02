@@ -499,6 +499,7 @@ function parasolReal(b: HB, x: number, gy: number, z: number, c1: string, c2: st
 }
 
 function towel(b: HB, x: number, z: number, yaw: number, ground: Ground, c1: string, c2: string): void {
+  if (TOYS && shapeOn('shapetowels')) return towelRumpled(b, x, z, yaw, ground, c1, c2);
   if (TOYS) return towelReal(b, x, z, yaw, ground, c1, c2);
   const gy = ground(x, z);
   b.pushT(x, gy - 0.015, z, yaw);
@@ -513,6 +514,88 @@ function towel(b: HB, x: number, z: number, yaw: number, ground: Ground, c1: str
   for (const [a, c, col] of bands) {
     b.color(col);
     b.quad([-W / 2, 0.035, a], [-W / 2, 0.035, c], [W / 2, 0.035, c], [W / 2, 0.035, a]);
+  }
+  b.pop();
+}
+
+/** a towel someone threw down: it follows lumps in the sand, keeps the crease it was folded along, one corner has turned up in the wind, and its
+ *  edges are not ruled lines. Each one differently (?noshapetowels). */
+function towelRumpled(b: HB, x: number, z: number, yaw: number, ground: Ground, c1: string, c2: string): void {
+  const gy = ground(x, z);
+  b.pushT(x, gy - 0.015, z, yaw);
+  const L = 1.7,
+    W = 0.85;
+  const ph = hpos(x, z, 3) * 6.283,
+    ph2 = hpos(x, z, 5) * 6.283;
+  const cu = hpos(x, z, 7) < 0.5 ? -1 : 1,
+    cv = hpos(x, z, 9) < 0.5 ? -1 : 1;
+  const creaseAt = (hpos(x, z, 11) - 0.5) * 0.7;
+  const ss = (a: number, e: number, t: number): number => {
+    const k = Math.min(1, Math.max(0, (t - a) / (e - a)));
+    return k * k * (3 - 2 * k);
+  };
+  // height of the cloth (local u along the length = z, v across = x)
+  const H = (u: number, v: number): number => {
+    let y = 0.034 + 0.012 * Math.sin(u * 3.7 + ph) * Math.sin(v * 5.3 + ph2) + 0.005 * Math.sin(u * 9.1 + v * 6.7 + ph2);
+    const d = u - creaseAt + v * 0.16;
+    y += 0.012 * Math.exp(-d * d * 240);
+    const cd = Math.hypot(u * cu - L / 2, v * cv - W / 2);
+    const up = ss(0.34, 0, cd);
+    return y + 0.075 * up * up;
+  };
+  const X = (u: number, v: number): number => v + 0.013 * Math.sin(u * 3.1 + ph2) + 0.005 * Math.sin(u * 8.3 + ph);
+  const Z = (u: number, v: number): number => u + 0.009 * Math.sin(v * 4.9 + ph);
+  const P = (u: number, v: number, y = H(u, v)): [number, number, number] => [X(u, v), y, Z(u, v)];
+  const us: number[] = [-L / 2, -L / 2 + 0.2, -L / 2 + 0.25];
+  for (let i = 1; i < 8; i++) us.push(-L / 2 + 0.25 + (i / 8) * (L - 0.5));
+  us.push(L / 2 - 0.25, L / 2 - 0.2, L / 2);
+  const vs: number[] = [];
+  for (let j = 0; j <= 6; j++) vs.push(-W / 2 + (j / 6) * W);
+  const bandCol = (i: number): string => (i === 1 || i === us.length - 3 ? '#fbf7ee' : i === 0 || i === us.length - 2 ? c2 : c1);
+  const sv = (u: number, v: number): number => {
+    const e = 0.012;
+    const gu = (H(u + e, v) - H(u - e, v)) / (2 * e),
+      gv = (H(u, v + e) - H(u, v - e)) / (2 * e);
+    const p = P(u, v);
+    return b.vtx(p[0], p[1], p[2], -gv, 1, -gu);
+  };
+  for (let i = 0; i < us.length - 1; i++) {
+    b.color(bandCol(i));
+    for (let j = 0; j < vs.length - 1; j++) {
+      const i0 = sv(us[i], vs[j]),
+        i1 = sv(us[i + 1], vs[j]),
+        i2 = sv(us[i + 1], vs[j + 1]),
+        i3 = sv(us[i], vs[j + 1]);
+      b.tri(i0, i1, i2);
+      b.tri(i0, i2, i3);
+    }
+    // the edge down to the sand along both long sides
+    const u0 = us[i],
+      u1 = us[i + 1];
+    b.quad(P(u0, -W / 2), P(u0, -W / 2, 0.012), P(u1, -W / 2, 0.012), P(u1, -W / 2));
+    b.quad(P(u1, W / 2), P(u1, W / 2, 0.012), P(u0, W / 2, 0.012), P(u0, W / 2));
+  }
+  b.color(c2);
+  for (let j = 0; j < vs.length - 1; j++) {
+    const v0 = vs[j],
+      v1 = vs[j + 1];
+    b.quad(P(-L / 2, v0), P(-L / 2, v1), P(-L / 2, v1, 0.012), P(-L / 2, v0, 0.012));
+    b.quad(P(L / 2, v1), P(L / 2, v0), P(L / 2, v0, 0.012), P(L / 2, v1, 0.012));
+  }
+  // tassels, each lying its own way
+  b.color('#f3eee2');
+  for (const end of [-1, 1]) {
+    for (let k = 0; k < 11; k++) {
+      const v = -W / 2 + 0.04 + (k / 10) * (W - 0.08);
+      const dv = 0.012 * Math.sin(k * 2.3 + ph);
+      const len = 0.045 + 0.018 * Math.sin(k * 3.7 + ph2);
+      const a = P((end * L) / 2, v),
+        c = end < 0 ? -L / 2 - len : L / 2 + len;
+      const y0 = a[1] - 0.004,
+        y1 = 0.016;
+      if (end < 0) b.quad([a[0] - 0.007, y0, a[2]], [a[0] - 0.007 + dv, y1, c], [a[0] + 0.007 + dv, y1, c], [a[0] + 0.007, y0, a[2]]);
+      else b.quad([a[0] + 0.007, y0, a[2]], [a[0] + 0.007 + dv, y1, c], [a[0] - 0.007 + dv, y1, c], [a[0] - 0.007, y0, a[2]]);
+    }
   }
   b.pop();
 }

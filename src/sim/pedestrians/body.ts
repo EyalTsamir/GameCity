@@ -18,6 +18,7 @@
 // Colour regions are resolved in the shader from per-instance colours and hem parameters, so
 // sleeves / trousers / tops / skirts are continuous parameters instead of hidden meshes.
 
+import { shapeOn } from '../../core/sweepshape';
 import { detailPeople } from '../../core/detailPeople';
 import { closePeople } from '../../core/closePeople';
 import * as THREE from 'three';
@@ -2493,7 +2494,8 @@ function buildProps(b: MeshBuilder, d: Dims, cfg: LodCfg): void {
   if (cfg.close) umbrellaClose(b, d);
   else umbrella(b, d, all ? 8 : cfg.props === 'pin' ? 4 : far ? 5 : 6, all);
   b.use(BONE.GROUND, REG.TOWEL, FB.TOWEL, 1);
-  towel(b);
+  if (shapeOn('shapetowels')) towelLaid(b, cfg.close ? 6 : far ? 1 : 3, cfg.close ? 12 : far ? 1 : 6);
+  else towel(b);
 }
 
 function umbrella(b: MeshBuilder, d: Dims, n: number, under: boolean): void {
@@ -2554,6 +2556,28 @@ function umbrellaClose(b: MeshBuilder, d: Dims): void {
     for (let i = 0; i < ps.length - 1; i++) stick(b, ps[i], ps[i + 1], 0.003, 3);
     stick(b, ps[1], pt(a, 0.01, apexY - 0.3), 0.002, 3);
   }
+}
+
+/** beach towel with the sand's lumps under it and uneven edges (nu x nv cells, near the walker only in numbers; h = z paints the stripes). */
+function towelLaid(b: MeshBuilder, nx: number, nz: number): void {
+  const x0 = -0.4,
+    x1 = 0.4,
+    z0 = -0.925,
+    z1 = 1.025;
+  const id: number[] = [];
+  for (let j = 0; j <= nz; j++)
+    for (let i = 0; i <= nx; i++) {
+      const x = x0 + ((x1 - x0) * i) / nx,
+        z = z0 + ((z1 - z0) * j) / nz;
+      const wob = nx > 1 ? 1 : 0;
+      // (keeps clear of the sand at the rim, the body lies on the middle)
+      const rim = Math.min(1, Math.min(x - x0, x1 - x) / 0.09);
+      const y = 0.008 + wob * (0.004 + rim * 0.006 * (1 + Math.sin(z * 3.7 + 1.1) * Math.sin(x * 5.3 + 0.4)) + 0.0035 * (1 + Math.sin(z * 9.1 + x * 6.7)));
+      const lift = wob * 0.05 * Math.max(0, 1 - Math.hypot(x - x1, z - z1) / 0.3) ** 2;
+      id.push(b.v([x + wob * 0.012 * Math.sin(z * 3.1 + 0.7), y + lift, z + wob * 0.008 * Math.sin(x * 4.9 + 2.1)], z, 0));
+    }
+  const row = nx + 1;
+  for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) b.quadDir(id[j * row + i], id[j * row + i + 1], id[(j + 1) * row + i + 1], id[(j + 1) * row + i], [0, 1, 0]);
 }
 
 /** beach towel (flat on the ground; stripes are painted by the shader from h = z) */

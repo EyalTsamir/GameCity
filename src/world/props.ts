@@ -473,15 +473,15 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'ticketMachine':
           at(kf);
-          SK.ticketMachine(kf);
+          SK.ticketMachine(kf, shapeOn('shapemachines') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'evCharger':
           at(kf);
-          SK.evCharger(kf);
+          SK.evCharger(kf, shapeOn('shapemachines') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'bottleBank':
           at(KS);
-          SK.bottleBank(KS, srng);
+          SK.bottleBank(KS, srng, shapeOn('shapemachines') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'pingpong':
           at(kf);

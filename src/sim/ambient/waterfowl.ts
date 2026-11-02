@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
 import type { Rng } from '../../core/rng';
 import { angleDiff, clamp } from './shared';
+import { shapeOn } from '../../core/sweepshape';
 
 type WaterSvc = { surfaceY(x: number, z: number): number; level(x: number, z: number): number; depth(x: number, z: number): number } | undefined;
 /** the parts of a boat (ctx.services.boats.fleet.boats[i]) we need */
@@ -136,6 +137,235 @@ function buildFowlGeometry(): THREE.BufferGeometry {
   return g;
 }
 
+/**
+ * The same birds for a walker on the bank (?noshapefowl): one smooth skin instead of facets, a fuller breast and a tail that lifts, a folded wing
+ * lying on each flank with a shaded fold under it, a neck that flares into the breast, a skull with a forehead and a spatulate bill. aAlong on
+ * the body = how far a fold darkens it.
+ */
+function buildFowlShaped(): THREE.BufferGeometry {
+  const pos: number[] = [];
+  const part: number[] = [];
+  const along: number[] = [];
+  const tri = (a: number[], b: number[], c: number[], pt: number, ta = 0, tb = 0, tc = 0): void => {
+    pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+    part.push(pt, pt, pt);
+    along.push(ta, tb, tc);
+  };
+  // z, half-width, top height, centre-lift: the hull, tail to breast
+  const KEYS = [
+    [-0.6, 0.016, 0.03, 0.2],
+    [-0.47, 0.075, 0.065, 0.13],
+    [-0.34, 0.155, 0.115, 0.06],
+    [-0.17, 0.222, 0.168, 0.018],
+    [0.04, 0.255, 0.195, 0],
+    [0.22, 0.242, 0.19, 0],
+    [0.36, 0.188, 0.165, 0.012],
+    [0.47, 0.105, 0.125, 0.032],
+    [0.53, 0.028, 0.08, 0.05],
+  ];
+  const cr = (a: number, b: number, c: number, d: number, t: number): number => 0.5 * (2 * b + (c - a) * t + (2 * a - 5 * b + 4 * c - d) * t * t + (3 * b - a - 3 * c + d) * t * t * t);
+  const hullAt = (u: number): number[] => {
+    const i = Math.min(KEYS.length - 2, Math.floor(u));
+    const k = (j: number): number[] => KEYS[clamp(j, 0, KEYS.length - 1)];
+    return [0, 1, 2, 3].map((q) => cr(k(i - 1)[q], k(i)[q], k(i + 1)[q], k(i + 2)[q], u - i));
+  };
+  const section = (h: number[], a: number, out = 0): number[] => {
+    const c = Math.cos(a),
+      s = Math.sin(a);
+    // a little fuller than an ellipse along the flank
+    const cf = Math.sign(c) * Math.pow(Math.abs(c), 0.86);
+    const nx = c / Math.max(0.01, h[1]),
+      ny = s / Math.max(0.01, h[2]);
+    const nl = Math.hypot(nx, ny) || 1;
+    return [cf * h[1] + (nx / nl) * out, h[3] + s * h[2] + (ny / nl) * out, h[0]];
+  };
+  const NR = 11,
+    NS = 11;
+  const rowOf = (r: number): number[][] => {
+    const h = hullAt((r / NR) * (KEYS.length - 1));
+    const row: number[][] = [];
+    for (let k = 0; k <= NS; k++) row.push(section(h, (k / NS) * Math.PI));
+    return row;
+  };
+  const rows: number[][][] = [];
+  for (let r = 0; r <= NR; r++) rows.push(rowOf(r));
+  // (the hull darkens a little toward the waterline and the tail)
+  const under = (k: number, r: number): number => 0.12 * (1 - Math.min(1, Math.min(k, NS - k) / 2)) + 0.08 * (1 - Math.min(1, r / 2));
+  for (let r = 0; r < NR; r++) {
+    for (let k = 0; k < NS; k++) {
+      const a = rows[r][k],
+        b = rows[r][k + 1],
+        c = rows[r + 1][k + 1],
+        d = rows[r + 1][k];
+      tri(a, b, c, PART.BODY, under(k, r), under(k + 1, r), under(k + 1, r + 1));
+      tri(a, c, d, PART.BODY, under(k, r), under(k + 1, r + 1), under(k, r + 1));
+    }
+    if (r < 3) {
+      tri(rows[r][0], rows[r][NS], rows[r + 1][NS], PART.BODY, 0.3, 0.3, 0.3);
+      tri(rows[r][0], rows[r + 1][NS], rows[r + 1][0], PART.BODY, 0.3, 0.3, 0.3);
+    } else
+      for (const k of [0, NS]) {
+        const a = rows[r][k],
+          d = rows[r + 1][k];
+        tri(a, d, [d[0] * 0.9, -0.08, d[2]], PART.BODY, 0.12, 0.12, 0.2);
+        tri(a, [d[0] * 0.9, -0.08, d[2]], [a[0] * 0.9, -0.08, a[2]], PART.BODY, 0.12, 0.2, 0.2);
+      }
+  }
+  const tail = [0, KEYS[0][3] + 0.035, -0.64];
+  for (let k = 0; k < NS; k++) tri(rows[0][k + 1], rows[0][k], tail, PART.BODY, 0.08, 0.08, 0.08);
+  const nose = [0, 0.07, 0.55];
+  for (let k = 0; k < NS; k++) tri(rows[NR][k], rows[NR][k + 1], nose, PART.BODY);
+  // the folded wings: a long ridge on each flank, tip toward the tail and a little proud of it
+  const WN = 8,
+    WS = 5;
+  for (const side of [0, 1]) {
+    const ring: number[][][] = [];
+    for (let i = 0; i <= WN; i++) {
+      const t = i / WN;
+      const u = 1.25 + t * 4.05;
+      const h = hullAt(u);
+      const sw = Math.min(1, t * 2.6 + 0.04) * Math.pow(Math.sin(Math.PI * Math.min(1, t * 0.5 + 0.5)), 0.5);
+      const row: number[][] = [];
+      for (let j = 0; j <= WS; j++) {
+        const q = j / WS;
+        const a0 = 0.8 + (q - 0.5) * 1.1 * sw;
+        const a = side ? Math.PI - a0 : a0;
+        row.push(section(h, a, -0.006 + 0.036 * sw * Math.sin(Math.PI * q)));
+      }
+      ring.push(row);
+    }
+    const shade = (j: number): number => (j === 0 || j === WS ? 0.3 : 0);
+    for (let i = 0; i < WN; i++)
+      for (let j = 0; j < WS; j++) {
+        const a = ring[i][j],
+          b = ring[i][j + 1],
+          c = ring[i + 1][j + 1],
+          d = ring[i + 1][j];
+        if (side) {
+          tri(a, b, c, PART.BODY, shade(j), shade(j + 1), shade(j + 1));
+          tri(a, c, d, PART.BODY, shade(j), shade(j + 1), shade(j));
+        } else {
+          tri(a, c, b, PART.BODY, shade(j), shade(j + 1), shade(j + 1));
+          tri(a, d, c, PART.BODY, shade(j), shade(j), shade(j + 1));
+        }
+      }
+  }
+  // the neck (bent in the shader)
+  const NK = 8,
+    NT = 9;
+  for (let j = 0; j < NT; j++)
+    for (let k = 0; k < NK; k++) {
+      const a0 = (k / NK) * Math.PI * 2,
+        a1 = ((k + 1) / NK) * Math.PI * 2;
+      const t0 = j / NT,
+        t1 = (j + 1) / NT;
+      const p = (a: number): number[] => [Math.cos(a), 0, Math.sin(a)];
+      tri(p(a0), p(a1), p(a1), PART.NECK, t0, t1, t0);
+      tri(p(a0), p(a0), p(a1), PART.NECK, t0, t1, t1);
+    }
+  // a loft along z of rings [z, y, rx, ry], closed at both ends
+  const loft = (rs: number[][], sides: number, pt: number): void => {
+    const at = (r: number[], k: number): number[] => {
+      const a = (k / sides) * Math.PI * 2;
+      return [Math.cos(a) * r[2], r[1] + Math.sin(a) * r[3], r[0]];
+    };
+    for (let i = 0; i + 1 < rs.length; i++)
+      for (let k = 0; k < sides; k++) {
+        const a = at(rs[i], k),
+          b = at(rs[i], k + 1),
+          c = at(rs[i + 1], k + 1),
+          d = at(rs[i + 1], k);
+        tri(a, c, b, pt);
+        tri(a, d, c, pt);
+      }
+    const e0 = [0, rs[0][1], rs[0][0] - 0.02],
+      e1 = [0, rs[rs.length - 1][1], rs[rs.length - 1][0] + 0.02];
+    for (let k = 0; k < sides; k++) {
+      tri(e0, at(rs[0], k), at(rs[0], k + 1), pt);
+      tri(e1, at(rs[rs.length - 1], k + 1), at(rs[rs.length - 1], k), pt);
+    }
+  };
+  // skull: round at the back, a forehead, narrowing into the bill
+  loft(
+    [
+      [-0.92, 0.08, 0.2, 0.2],
+      [-0.68, 0.1, 0.62, 0.66],
+      [-0.24, 0.12, 0.84, 0.9],
+      [0.2, 0.1, 0.8, 0.84],
+      [0.56, -0.02, 0.58, 0.56],
+      [0.86, -0.12, 0.42, 0.34],
+    ],
+    10,
+    PART.HEAD,
+  );
+  // the bill: broad at the base, flattening, a rounded spatula with a nail at the tip
+  loft(
+    [
+      [0.72, -0.1, 0.44, 0.34],
+      [1.12, -0.19, 0.42, 0.21],
+      [1.5, -0.26, 0.4, 0.12],
+      [1.88, -0.3, 0.4, 0.085],
+      [2.04, -0.31, 0.2, 0.05],
+    ],
+    8,
+    PART.BILL,
+  );
+  // eyes, set in the side of the head
+  for (const s of [1, -1]) {
+    const c = [s * 0.74, 0.3, 0.26];
+    const r = 0.13;
+    const P = [
+      [c[0] + s * r, c[1], c[2]],
+      [c[0], c[1] + r, c[2]],
+      [c[0], c[1], c[2] + r],
+      [c[0], c[1] - r, c[2]],
+      [c[0], c[1], c[2] - r],
+    ];
+    for (let k = 1; k <= 4; k++) tri(P[0], P[k], P[k === 4 ? 1 : k + 1], PART.EYE);
+  }
+  // one smooth skin: every corner takes the mean of the faces meeting at its position (per part, so the bill keeps its own edge with the head)
+  const n = pos.length / 3;
+  const nrm = new Float32Array(n * 3);
+  const sum = new Map<string, number[]>();
+  const keyOf = (i: number): string => `${part[i]}|${pos[i * 3].toFixed(4)},${pos[i * 3 + 1].toFixed(4)},${pos[i * 3 + 2].toFixed(4)}`;
+  for (let i = 0; i < n; i += 3) {
+    const ax = pos[i * 3],
+      ay = pos[i * 3 + 1],
+      az = pos[i * 3 + 2];
+    const ux = pos[i * 3 + 3] - ax,
+      uy = pos[i * 3 + 4] - ay,
+      uz = pos[i * 3 + 5] - az;
+    const vx = pos[i * 3 + 6] - ax,
+      vy = pos[i * 3 + 7] - ay,
+      vz = pos[i * 3 + 8] - az;
+    const fx = uy * vz - uz * vy,
+      fy = uz * vx - ux * vz,
+      fz = ux * vy - uy * vx;
+    for (let q = 0; q < 3; q++) {
+      const key = keyOf(i + q);
+      const e = sum.get(key);
+      if (e) {
+        e[0] += fx;
+        e[1] += fy;
+        e[2] += fz;
+      } else sum.set(key, [fx, fy, fz]);
+    }
+  }
+  for (let i = 0; i < n; i++) {
+    const e = sum.get(keyOf(i)) as number[];
+    const l = Math.hypot(e[0], e[1], e[2]) || 1;
+    nrm[i * 3] = e[0] / l;
+    nrm[i * 3 + 1] = e[1] / l;
+    nrm[i * 3 + 2] = e[2] / l;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
+  g.setAttribute('aPart', new THREE.Float32BufferAttribute(part, 1));
+  g.setAttribute('aAlong', new THREE.Float32BufferAttribute(along, 1));
+  return g;
+}
+
 const FOWL_GLSL = /* glsl */ `
 attribute float aPart;
 attribute float aAlong;
@@ -145,6 +375,7 @@ attribute vec3 iBill;
 attribute vec4 iNeck; // x neck height, y head forward, z S-bend, w head pitch (+ down)
 attribute vec2 iSize; // x neck radius, y head radius
 varying vec3 vFowlCol;
+varying vec4 vFowlF;
 vec3 neckPoint(float t, out vec3 tang) {
   vec3 B = vec3(0.0, 0.1, 0.32);
   vec3 E = B + vec3(0.0, iNeck.x, iNeck.y);
@@ -154,12 +385,14 @@ vec3 neckPoint(float t, out vec3 tang) {
   return p;
 }
 void fowlPose(inout vec3 p, inout vec3 n) {
-  if (aPart < 0.5) { vFowlCol = iBody; return; }
+  vFowlF = vec4(p, 0.0);
+  if (aPart < 0.5) { vFowlCol = iBody * (1.0 - aAlong); vFowlF.w = 1.0; return; }
   if (aPart < 1.5) {
     vec3 T;
     vec3 c = neckPoint(aAlong, T);
     vec3 P = normalize(vec3(0.0, -T.z, T.y));
-    float r = iSize.x * mix(1.15, 0.85, aAlong);
+    // (the neck grows out of the breast)
+    float r = iSize.x * mix(1.15, 0.85, aAlong) * (1.0 + 0.5 * (1.0 - smoothstep(0.0, 0.22, aAlong)));
     vec3 off = vec3(p.x, 0.0, 0.0) * r + P * p.z * r;
     n = normalize(vec3(p.x, 0.0, 0.0) + P * p.z);
     p = c + off;
@@ -186,10 +419,21 @@ function makeFowlMaterial(): THREE.MeshLambertMaterial {
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3( normal );\nvec3 fowlP = vec3( position );\nfowlPose( fowlP, objectNormal );')
       .replace('#include <begin_vertex>', 'vec3 transformed = fowlP;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vFowlCol;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.rgb *= vFowlCol;');
+      .replace('#include <common>', '#include <common>\nvarying vec3 vFowlCol;\nvarying vec4 vFowlF;')
+      .replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+        diffuseColor.rgb *= vFowlCol;
+        // rows of feathers overlapping tailward, gone at a distance
+        if (vFowlF.w > 0.5) {
+          vec2 fu = vec2(vFowlF.x * 30.0 + 1.3 * sin(vFowlF.z * 9.0), vFowlF.z * 21.0 + vFowlF.y * 14.0 + 0.8 * sin(vFowlF.x * 17.0));
+          fu.x += 0.5 * mod(floor(fu.y), 2.0);
+          float fd = length(fract(fu) - vec2(0.5, 0.15));
+          diffuseColor.rgb *= 1.0 - 0.05 * smoothstep(0.34, 0.66, fd) * smoothstep(7.0, 1.5, length(vViewPosition));
+        }`,
+      );
   };
-  m.customProgramCacheKey = () => 'tinyhaven-ambient-fowl-1';
+  m.customProgramCacheKey = () => 'tinyhaven-ambient-fowl-3';
   return m;
 }
 
@@ -298,7 +542,7 @@ export function createWaterfowl(ctx: CityContext): FowlSystem {
     aBill = mk(3),
     aNeck = mk(4).setUsage(THREE.DynamicDrawUsage),
     aSize = mk(2);
-  const geo = buildFowlGeometry();
+  const geo = shapeOn('shapefowl') ? buildFowlShaped() : buildFowlGeometry();
   geo.setAttribute('iBody', aBody);
   geo.setAttribute('iHead', aHead);
   geo.setAttribute('iBill', aBill);
