@@ -4,6 +4,8 @@
 
 import { hex, shade, type Col, Kit } from './kit';
 import * as G from './goods';
+import { WINDOW_CARDS, WINDOW_DISP } from './windows';
+import { shapeOn } from '../../core/sweepshape';
 
 type R = () => number;
 
@@ -873,6 +875,32 @@ const C: Record<string, { size: number; draw(k: Kit, r: R): void }> = {
   dispMannequins: {
     size: 2,
     draw(k, r) {
+      if (shapedWindows) {
+        for (const [x, hatted] of [[0.55, r() < 0.4], [1.45, r() < 0.4]] as const) {
+          // a figure with a real waist and shoulders, a slope to the arms, a dress with a belt; a round foot, a hat with a brim
+          const c = G.pick(r, G.PAL.cloth);
+          const s = hex(0xe8e0d4),
+            z = 0.45;
+          k.lathe(x, z, [[0.17, 0], [0.17, 0.018], [0.02, 0.03]], hex(0x8a8c8e), 10);
+          k.bar(x, 0.02, x, 0.5, z - 0.03, 0.012, hex(0x9a9ea2));
+          k.lathe(x, z, [[0.27, 0.42], [0.235, 0.7], [0.185, 0.92], [0.135, 1.1], [0.128, 1.14], [0.165, 1.26], [0.17, 1.33], [0.14, 1.4], [0.075, 1.45], [0.04, 1.47]], c, 10);
+          k.lathe(x, z, [[0.132, 1.09], [0.13, 1.13]], shade(c, 0.45), 10);
+          for (const sd of [-1, 1]) {
+            k.ball(x + sd * 0.165, 1.385, z, 0.05, 0.05, 0.05, c, 7);
+            k.bar(x + sd * 0.2, 1.385, x + sd * 0.235, 1.12, z + 0.02, 0.036, shade(c, 0.92));
+            k.bar(x + sd * 0.235, 1.12, x + sd * 0.22, 0.88, z + 0.04, 0.03, shade(c, 0.92));
+            k.ball(x + sd * 0.22, 0.86, z + 0.04, 0.026, 0.045, 0.02, s, 6);
+          }
+          k.cyl(x, 1.46, z, 0.038, 0.08, s, 6);
+          k.ball(x, 1.62, z, 0.082, 0.11, 0.09, s, 8);
+          if (hatted) {
+            const b = shade(c, 0.6);
+            k.lathe(x, z, [[0.17, 1.69], [0.17, 1.695], [0.09, 1.705]], b, 10);
+            k.lathe(x, z, [[0.09, 1.705], [0.085, 1.76], [0.06, 1.785], [0.001, 1.79]], b, 10);
+          }
+        }
+        return;
+      }
       for (const x of [0.55, 1.45]) {
         const c = G.pick(r, G.PAL.cloth);
         const s = hex(0xe8e0d4);
@@ -1196,7 +1224,8 @@ const C: Record<string, { size: number; draw(k: Kit, r: R): void }> = {
   },
 };
 
-export const CARD_PAGES: CardPage[] = Object.entries(C).map(([name, v]) => ({ name, size: v.size, draw: v.draw }));
+const shapedWindows = shapeOn('shaperooms');
+export const CARD_PAGES: CardPage[] = Object.entries(shapedWindows ? { ...C, ...WINDOW_CARDS } : C).map(([name, v]) => ({ name, size: v.size, draw: v.draw }));
 
 // ── room kinds ──────────────────────────────────────────────────────────────────────────────────────────────
 /** floor look (GLSL `floorKind`) */
@@ -1254,4 +1283,5 @@ export const ROOM_KINDS: RoomKind[] = [
   { name: 'work', walls: ['rackBoxes', 'workBench', 'rackBoxes', 'blank'], mid: ['workRow', 'crateStack'], disp: [], paints: [0xb0b4ac, 0xc0bcb0], floors: [FLOOR.STONE], lamp: LAMP.STRIP, depth: [7, 14], midK: 0.8, dispK: 0 },
   { name: 'hall', walls: ['hall', 'blank', 'homeDoor'], mid: ['bench', 'lobbySeats'], disp: [], paints: [0xd8d0b8, 0xc8d0c8], floors: [FLOOR.STONE, FLOOR.TILE], lamp: LAMP.PENDANT, depth: [3.5, 6], midK: 0.3, dispK: 0 },
 ];
+if (shapedWindows) for (const kind of ROOM_KINDS) kind.disp = WINDOW_DISP[kind.name] ?? kind.disp;
 export const kindIndex = (name: string): number => ROOM_KINDS.findIndex((k) => k.name === name);

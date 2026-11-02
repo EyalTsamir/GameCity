@@ -925,8 +925,20 @@ function vergePit(sh: Shaper, rng: Rng, hx: number, hz: number, nsh: Shaper): vo
   }
   litter(sh, rng, Math.min(hx, hz) * 0.9, 8, 0.018);
   // sett edging: 10 cm granite setts with joints, slightly irregular heights and tones
+  const flushSetts = shapeOn('shapepit');
+  if (flushSetts) {
+    // the mortar bed the joints show
+    s.rgb(0.13, 0.125, 0.12);
+    for (const sz of [-1, 1]) sh.box(0, 0.004, sz * (hz - 0.05), hx * 2 - 0.01, 0.006, 0.1, 1);
+    for (const sx of [-1, 1]) sh.box(sx * (hx - 0.05), 0.004, 0, 0.1, 0.006, hz * 2 - 0.2, 1);
+  }
   const sett = (x: number, z: number, w: number, d: number) => {
     const k = rng.range(0.85, 1.08);
+    if (flushSetts) {
+      s.rgb(0.25 * k, 0.245 * k, 0.24 * k);
+      sh.box(x, 0.008 + rng.range(-0.003, 0.003), z, w + 0.006, 0.018, d + 0.006, 1);
+      return;
+    }
     s.rgb(0.42 * k, 0.41 * k, 0.4 * k);
     sh.box(x, 0.02 + rng.range(-0.004, 0.004), z, w, 0.04, d, 1);
   };

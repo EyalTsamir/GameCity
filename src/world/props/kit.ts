@@ -571,16 +571,80 @@ export function taxiSign(k: Kit): void {
 }
 
 /** Drinks / ticket vending machine pair. Faces +Z. */
-export function vending(k: Kit, rng: Rng): void {
+/** what a vending machine has up close (?noshapevending): a door in its frame, shelves of cans and bottles behind the glass, keys, a slot, a flap */
+function vendingNear(kd: Kit, x: number, c: string, rng: Rng): void {
+  const sh = kd.sh;
+  // the door's gap, the frame round the glass
+  kd.m('#141516', 'plastic');
+  sh.box(x, 0.97, 0.3505, 0.468, 1.68, 0.002, 0);
+  kd.m(c, 'paint');
+  sh.box(x, 0.97, 0.3515, 0.456, 1.66, 0.002, 0);
+  kd.e('#bcd4e0', '#e8f4ff', 0.9);
+  sh.box(x - 0.06, 1.2, 0.3565, 0.32, 1.0, 0.002, 0);
+  kd.m('#23262a', 'plastic');
+  for (const dx of [-0.17, 0.05]) sh.box(x + dx, 1.2, 0.3585, 0.016, 1.03, 0.006, 0);
+  for (const y of [0.695, 1.705]) sh.box(x - 0.06, y, 0.3585, 0.236, 0.016, 0.006, 0);
+  for (let row = 0; row < 5; row++) {
+    const y = 0.74 + row * 0.195;
+    kd.m('#9aa3a8', 'steel');
+    sh.box(x - 0.06, y, 0.3595, 0.21, 0.008, 0.008, 0);
+    const brand = rng.pick(['#c9302c', '#2f5f9e', '#e8b23c', '#2a7a4a', '#ece8dc', '#d9702a', '#25282b']);
+    const bottle = row > 2;
+    for (let i = 0; i < 4; i++) {
+      kd.m(rng.chance(0.75) ? brand : rng.pick(['#c9302c', '#2f5f9e', '#e8b23c', '#ece8dc']), 'plastic');
+      const cx = x - 0.135 + i * 0.05,
+        z = 0.363;
+      if (bottle) {
+        sh.cyl(cx, y + 0.004, z, 0.018, 0.018, 0.1, 6, 0);
+        sh.cyl(cx, y + 0.104, z, 0.018, 0.007, 0.03, 6, 0);
+        kd.m('#f0eee6', 'plastic');
+        sh.cyl(cx, y + 0.134, z, 0.008, 0.008, 0.012, 6, 2);
+      } else {
+        sh.cyl(cx, y + 0.004, z, 0.02, 0.02, 0.11, 6, 0);
+        kd.m('#c6c9cc', 'steel');
+        sh.cyl(cx, y + 0.114, z, 0.016, 0.016, 0.004, 6, 2);
+      }
+      kd.m('#f6f4ec', 'plastic');
+      sh.box(cx, y - 0.016, 0.3635, 0.03, 0.014, 0.001, 0);
+    }
+  }
+  // the key panel: a little lit screen, keys, the coin slot, the card reader
+  kd.m('#1d1f22', 'plastic');
+  sh.box(x + 0.17, 1.05, 0.3575, 0.09, 0.34, 0.004, 0);
+  kd.e('#7fae8a', '#a8ffc0', 0.8);
+  sh.box(x + 0.17, 1.17, 0.36, 0.07, 0.03, 0.001, 0);
+  kd.m('#a8acb0', 'steel');
+  for (let r = 0; r < 4; r++) for (let q = 0; q < 3; q++) sh.box(x + 0.15 + q * 0.021, 1.125 - r * 0.024, 0.3605, 0.016, 0.017, 0.002, 0);
+  kd.m('#6d7278', 'steel');
+  sh.box(x + 0.17, 1.0, 0.3595, 0.04, 0.012, 0.002, 0);
+  kd.m('#101112', 'plastic');
+  sh.box(x + 0.17, 0.965, 0.3595, 0.05, 0.022, 0.002, 0);
+  // where it drops: a dark bay and a push flap
+  kd.m('#0f1011', 'plastic');
+  sh.box(x, 0.36, 0.3525, 0.36, 0.2, 0.002, 0);
+  kd.m('#30343a', 'plastic');
+  sh.box(x, 0.385, 0.3545, 0.34, 0.14, 0.002, 0);
+  kd.m('#7a8086', 'steel');
+  sh.box(x, 0.45, 0.356, 0.3, 0.008, 0.003, 0);
+  // the kick plate and four levelling feet
+  kd.m('#25282b', 'steel');
+  sh.box(x, 0.1, 0.352, 0.48, 0.08, 0.004, 0);
+  for (const fx of [-0.2, 0.2]) sh.cyl(x + fx, 0, 0.28, 0.026, 0.02, 0.04, 6, 0);
+}
+
+export function vending(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
+  const shaped = shapeOn('shapevending');
   for (const x of [-0.26, 0.26]) {
     const c = rng.pick(['#c9302c', '#2f5f9e', '#2a7a4a', '#e8e4da']);
     k.m(c, 'paint');
-    sh.box(x, 0.95, 0, 0.5, 1.9, 0.7, 1);
+    if (shaped) cbox(sh, x, 0.95, 0, 0.5, 1.9, 0.7, 0.018, 1);
+    else sh.box(x, 0.95, 0, 0.5, 1.9, 0.7, 1);
     k.e('#bcd4e0', '#e8f4ff', 0.9);
     sh.box(x - 0.06, 1.2, 0.351, 0.32, 1.0, 0.01, 0);
     k.m('#1d1f22', 'paint');
     sh.box(x + 0.17, 1.05, 0.352, 0.08, 0.3, 0.01, 0);
+    if (kd) vendingNear(kd, x, c, rng);
   }
 }
 
@@ -1235,7 +1299,7 @@ export function gasCage(k: Kit, rng: Rng): void {
 }
 
 /** Two IBC tanks (white tanks in steel cages on pallets). */
-export function ibc(k: Kit, rng: Rng): void {
+export function ibc(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
   for (const x of [-0.62, 0.62]) {
     if (x > 0 && rng.chance(0.25)) continue;
@@ -1252,20 +1316,99 @@ export function ibc(k: Kit, rng: Rng): void {
     sh.box(x, 1.16, 0, 1.04, 0.03, 0.96, 0);
     k.m('#2a2c2e', 'plastic');
     sh.cyl(x, 1.17, 0, 0.1, 0.1, 0.05, 8, 2);
+    if (kd) {
+      // near (?noshapeibc): a steel pallet with feet, a cage of round bars, the blow-moulded tank's ribs, the valve, the filler's clips
+      const s = kd.sh;
+      kd.m('#9aa3a8', 'steel');
+      for (const f of [-1, 1]) {
+        for (let q = -2; q <= 2; q++) if (q) {
+          s.tube(x + (q * 0.5) / 2, 0.15, f * 0.478, x + (q * 0.5) / 2, 1.17, f * 0.478, 0.009, 0.009, 5);
+          s.tube(x + f * 0.522, 0.15, (q * 0.46) / 2, x + f * 0.522, 1.17, (q * 0.46) / 2, 0.009, 0.009, 5);
+        }
+        for (const y of [0.15, 0.4, 0.65, 0.9, 1.17]) {
+          s.tube(x - 0.52, y, f * 0.478, x + 0.52, y, f * 0.478, 0.009, 0.009, 5);
+          s.tube(x + f * 0.522, y, -0.47, x + f * 0.522, y, 0.47, 0.009, 0.009, 5);
+        }
+      }
+      kd.m('#d8d4c8', 'plastic');
+      for (const dy of [0.32, 0.56, 0.8, 1.02]) s.box(x, dy, 0.462, 0.98, 0.02, 0.004, 0);
+      kd.m('#4a4d50', 'steel');
+      for (const fx of [-0.5, 0, 0.5]) for (const fz of [-0.42, 0.42]) s.box(x + fx, 0.03, fz, 0.1, 0.06, 0.14, 1);
+      kd.m('#e0dccc', 'plastic');
+      s.box(x + 0.3, 1.0, 0.484, 0.26, 0.17, 0.002, 0);
+      kd.m('#3a3d42', 'plastic');
+      for (let i = 0; i < 4; i++) s.box(x + 0.3, 1.05 - i * 0.03, 0.4855, 0.21 - i * 0.03, 0.01, 0.001, 0);
+      // the valve at the foot
+      kd.m('#2f6fb0', 'plastic');
+      s.tube(x, 0.21, 0.46, x, 0.21, 0.56, 0.038, 0.038, 8, true);
+      kd.m('#e8762c', 'plastic');
+      s.box(x, 0.26, 0.525, 0.11, 0.025, 0.02, 0);
+      kd.m('#2a2c2e', 'plastic');
+      s.cyl(x, 1.215, 0, 0.11, 0.11, 0.022, 12, 2);
+      for (let i = 0; i < 8; i++) s.box(x + Math.cos((i / 8) * 6.283) * 0.112, 1.225, Math.sin((i / 8) * 6.283) * 0.112, 0.012, 0.014, 0.012, 0);
+    }
   }
 }
 
 /** Wheeled steel dumpster with lids. Faces +Z. */
-export function dumpster(ks: Kit, rng: Rng): void {
+export function dumpster(ks: Kit, rng: Rng, kd?: Kit): void {
   const sh = ks.sh;
   const c = rng.pick(['#3f6e4a', '#2f5f9e', '#3a3f44', '#7a5232']);
+  const shaped = shapeOn('shapedumpster');
   ks.m(c, 'paint');
-  sh.box(0, 0.75, 0, 1.9, 1.05, 1.05, 1);
+  if (shaped) cbox(sh, 0, 0.75, 0, 1.9, 1.05, 1.05, 0.03, 1);
+  else sh.box(0, 0.75, 0, 1.9, 1.05, 1.05, 1);
   ks.m('#2a2c2e', 'plastic');
+  const openLid = rng.chance(0.3);
   sh.push().local(-0.48, 1.3, 0, -0.08).box(0, 0, 0, 0.92, 0.05, 1.1, 0).pop();
-  sh.push().local(0.48, 1.3, 0, rng.chance(0.3) ? -0.9 : -0.06).box(0, 0, 0, 0.92, 0.05, 1.1, 0).pop();
+  sh.push().local(0.48, 1.3, 0, openLid ? -0.9 : -0.06).box(0, 0, 0, 0.92, 0.05, 1.1, 0).pop();
   ks.m('#1d1f22', 'rubber');
-  for (const x of [-0.8, 0.8]) for (const z of [-0.4, 0.4]) sh.cyl(x, 0, z, 0.1, 0.1, 0.22, 6, 2);
+  for (const x of [-0.8, 0.8]) for (const z of [-0.4, 0.4]) sh.cyl(x, 0, z, 0.1, 0.1, 0.22, shaped ? 12 : 6, 2);
+  if (!kd || !shaped) return;
+  // near (?noshapedumpster): pressed ribs, a rolled rim, trunnions and forks pockets, castors in forks, lid ribs and handles, a number, scrapes and dirt
+  const s = kd.sh;
+  kd.m(c, 'paint');
+  kd.s.r *= 0.82;
+  kd.s.g *= 0.82;
+  kd.s.b *= 0.82;
+  for (const f of [-1, 1]) {
+    for (const dx of [-0.72, -0.36, 0, 0.36, 0.72]) s.box(dx, 0.75, f * 0.532, 0.06, 0.98, 0.016, 1);
+    for (const dz of [-0.26, 0.26]) s.box(f * 0.957, 0.75, dz, 0.016, 0.98, 0.06, 1);
+  }
+  kd.m(c, 'paint');
+  kd.s.r *= 1.08;
+  kd.s.g *= 1.08;
+  kd.s.b *= 1.08;
+  for (const f of [-1, 1]) {
+    s.tube(-0.95, 1.255, f * 0.535, 0.95, 1.255, f * 0.535, 0.022, 0.022, 6);
+    s.tube(f * 0.965, 1.255, -0.53, f * 0.965, 1.255, 0.53, 0.022, 0.022, 6);
+  }
+  kd.m('#3a3d42', 'steel');
+  for (const f of [-1, 1]) {
+    s.tube(f * 0.95, 0.98, 0, f * 1.06, 0.98, 0, 0.042, 0.042, 10, true);
+    s.tube(f * 1.06, 0.98, 0, f * 1.09, 0.98, 0, 0.06, 0.06, 10, true);
+    s.box(f * 0.45, 0.26, 0.537, 0.26, 0.09, 0.014, 0);
+    s.box(f * 0.45, 0.26, -0.537, 0.26, 0.09, 0.014, 0);
+  }
+  for (const x of [-0.8, 0.8])
+    for (const z of [-0.4, 0.4]) {
+      s.box(x, 0.215, z, 0.07, 0.016, 0.12, 0);
+      for (const f of [-1, 1]) s.box(x, 0.15, z + f * 0.05, 0.05, 0.12, 0.008, 0);
+      s.cyl(x, 0.03, z, 0.03, 0.03, 0.2, 8, 2);
+    }
+  kd.m('#1b1c1e', 'plastic');
+  for (const sx of [-1, 1]) {
+    if (sx > 0 && openLid) continue;
+    s.push().local(sx * 0.48, 1.3, 0, sx < 0 ? -0.08 : -0.06);
+    for (const dx of [-0.3, -0.1, 0.1, 0.3]) s.box(dx, 0.03, 0, 0.05, 0.016, 1.04, 0);
+    s.tube(-0.12, 0.012, 0.57, 0.12, 0.012, 0.57, 0.012, 0.012, 6);
+    s.pop();
+  }
+  kd.m('#ecebe2', 'paint');
+  pixelText(s, String(rng.int(11, 94)), -0.54, 0.86, 0.5405, 0.024, 0.001, true);
+  kd.m('#8a4a2a', 'iron');
+  kd.s.r *= 0.9;
+  for (let i = 0; i < 7; i++) s.box(rng.range(-0.86, 0.86), rng.range(0.34, 0.62), 0.5295 + 0.001 * i, rng.range(0.03, 0.16), rng.range(0.006, 0.03), 0.001, 0);
 }
 
 // ─────────────────────────────────────────────────────────────── quay ──
@@ -1309,11 +1452,11 @@ export function fishBoxes(k: Kit, rng: Rng): void {
           k.s.r = r * 0.56;
           k.s.g = g * 0.56;
           k.s.b = b * 0.56;
-          sh.box(0, 0.2555, 0, 0.7, 0.001, 0.44, 1);
+          sh.box(0, 0.259, 0, 0.7, 0.002, 0.44, 1);
           k.s.r = r * 0.3;
           k.s.g = g * 0.3;
           k.s.b = b * 0.3;
-          sh.box(0, 0.2565, 0, 0.66, 0.001, 0.4, 1);
+          sh.box(0, 0.264, 0, 0.66, 0.002, 0.4, 1);
         }
         sh.pop();
         continue;
@@ -1364,9 +1507,49 @@ export function pots(k: Kit, rng: Rng): void {
 }
 
 /** Coiled mooring rope. */
-export function rope(k: Kit, rng: Rng): void {
+export function rope(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
-  k.m(rng.pick(['#d8c890', '#e8b23c', '#2f6fb0', '#e8e4da']), 'rubber');
+  const col = rng.pick(['#d8c890', '#e8b23c', '#2f6fb0', '#e8e4da']);
+  k.m(col, 'rubber');
+  if (shapeOn('shaperope')) {
+    // a heap with the fall of a coil from afar, turn by turn near (?noshaperope)
+    const ringAt = (R: number, y: number): void => {
+      if (!kd) return;
+      for (let i = 0; i < 26; i++) {
+        const a0 = (i / 26) * Math.PI * 2,
+          a1 = ((i + 1) / 26) * Math.PI * 2,
+          w = Math.sin(a0 * 3 + R * 30) * 0.008;
+        kd.sh.tube(Math.cos(a0) * R, y + w, Math.sin(a0) * R, Math.cos(a1) * R, y + Math.sin(a1 * 3 + R * 30) * 0.008, Math.sin(a1) * R, 0.021, 0.021, 5);
+      }
+    };
+    smoothLathe(sh, 0, 0, [[0.43, 0], [0.44, 0.05], [0.41, 0.11], [0.34, 0.17], [0.26, 0.2], [0.17, 0.2], [0.13, 0.16]], 20);
+    k.m('#141516', 'rubber');
+    sh.disc(0, 0.16, 0, 0.14, 12, 1);
+    if (kd) {
+      kd.m(col, 'rubber');
+      const lay = [
+        [0.445, 0.021], [0.405, 0.021], [0.365, 0.021], [0.325, 0.021],
+        [0.43, 0.058], [0.39, 0.058], [0.35, 0.058], [0.31, 0.058],
+        [0.39, 0.095], [0.35, 0.095], [0.31, 0.095], [0.27, 0.095],
+        [0.35, 0.132], [0.31, 0.132], [0.27, 0.132], [0.23, 0.132],
+        [0.29, 0.168], [0.25, 0.168], [0.21, 0.168],
+      ];
+      for (const [R, y] of lay) ringAt(R, y);
+      // the free end, off across the ground with its whipping
+      let px = 0.45,
+        pz = 0;
+      for (let i = 1; i <= 7; i++) {
+        const qx = 0.45 + i * 0.09,
+          qz = Math.sin(i * 0.9) * 0.07;
+        kd.sh.tube(px, 0.021, pz, qx, 0.021, qz, 0.021, 0.021, 5);
+        px = qx;
+        pz = qz;
+      }
+      kd.m('#22242a', 'rubber');
+      kd.sh.tube(px, 0.021, pz, px + 0.05, 0.021, pz, 0.023, 0.023, 6, true);
+    }
+    return;
+  }
   for (let i = 0; i < 3; i++) sh.cyl(0, i * 0.07, 0, 0.45 - i * 0.04, 0.45 - i * 0.04, 0.07, 12, 2);
   k.m('#1d1f22', 'rubber');
   sh.disc(0, 0.215, 0, 0.18, 8, 1);

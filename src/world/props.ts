@@ -409,7 +409,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'vending':
           at(kf);
-          SK.vending(kf, srng);
+          SK.vending(kf, srng, shapeOn('shapevending') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'trolleys':
           at(kf);
@@ -449,11 +449,11 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'ibc':
           at(kf);
-          SK.ibc(kf, srng);
+          SK.ibc(kf, srng, shapeOn('shapeibc') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'dumpster':
           at(KS);
-          SK.dumpster(KS, srng);
+          SK.dumpster(KS, srng, yardNear(it.x, y, it.z, it.yaw));
           break;
         case 'fishBoxes':
           at(kf);
@@ -469,7 +469,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'rope':
           at(kf);
-          SK.rope(kf, srng);
+          SK.rope(kf, srng, shapeOn('shaperope') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'ticketMachine':
           at(kf);

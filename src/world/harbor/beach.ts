@@ -740,7 +740,75 @@ export function beachBall(b: HB, x: number, z: number, ground: Ground, r = 0.22)
   }
 }
 
+/** a sit-in kayak: stations along a rockered hull, six points round each section, a coaming, deck lines, the paddle across the cockpit */
+function kayakReal(b: HB, x: number, z: number, yaw: number, ground: Ground, col: string): void {
+  const gy = ground(x, z);
+  b.pushT(x, Math.max(gy, WATER_LEVEL + 0.02) + 0.02, z, yaw);
+  const L = 1.78,
+    n = 16;
+  const hw = (s: number) => 0.31 * Math.pow(Math.max(0, 1 - Math.pow(Math.abs(s) / L, 2.4)), 0.72);
+  const keel = (s: number) => 0.015 + 0.17 * Math.pow(Math.abs(s) / L, 3);
+  const sheer = (s: number) => 0.19 + 0.09 * Math.pow(s / L, 2);
+  const crown = (s: number) => sheer(s) + (0.075 * hw(s)) / 0.31;
+  const across: [number, number][] = [[0, 0], [0.62, 0.05], [0.93, 0.56], [1, 1], [0.6, 1.75], [0, 2]];
+  const P = (s: number, j: number, sd: number): V3 => {
+    const k = keel(s),
+      g = sheer(s),
+      t = across[j];
+    const y = t[1] <= 1 ? k + (g - k) * t[1] : g + (crown(s) - g) * (t[1] - 1);
+    return [sd * hw(s) * t[0], y, s];
+  };
+  const st: number[] = [];
+  for (let i = 0; i <= n; i++) st.push(-L * Math.cos((Math.PI * i) / n));
+  b.color(col).pat(PAT.NONE);
+  for (let i = 0; i < n; i++)
+    for (let j = 0; j < across.length - 1; j++)
+      for (const sd of [-1, 1]) {
+        const a = P(st[i], j + 1, sd),
+          bb = P(st[i + 1], j + 1, sd),
+          c = P(st[i + 1], j, sd),
+          d = P(st[i], j, sd);
+        if (sd > 0) b.quad(a, bb, c, d);
+        else b.quad(a, d, c, bb);
+      }
+  // the cockpit: a dark well, the coaming round it, the seat's back
+  const cz = 0.05,
+    rx = 0.195,
+    rz = 0.37,
+    deck = crown(cz);
+  const ring: V3[] = [];
+  for (let i = 0; i < 20; i++) {
+    const a = (i / 20) * Math.PI * 2;
+    ring.push([Math.cos(a) * rx, deck + 0.012, cz + Math.sin(a) * rz]);
+  }
+  b.color('#111315');
+  const mid: V3 = [0, deck + 0.012, cz];
+  for (let i = 0; i < 20; i++) b.triangle(mid, ring[(i + 1) % 20], ring[i]);
+  b.color('#25282b');
+  b.box(0, deck + 0.05, cz - 0.3, 0.26, 0.09, 0.025, 0, 1);
+  b.tube(ring, 0.014, 5, true);
+  // bungee on the foredeck, toggles at the ends
+  b.color('#16181a');
+  for (const sd of [-1, 1]) b.tube([[sd * 0.1, crown(0.75) - 0.012, 0.72], [-sd * 0.09, crown(1.05) - 0.012, 1.06]], 0.005, 4);
+  for (const e of [-1, 1]) b.tube([[-0.035, sheer(L * 0.98) + 0.03, e * (L - 0.05)], [0.035, sheer(L * 0.98) + 0.03, e * (L - 0.05)]], 0.009, 4);
+  // the paddle lying across
+  b.pushT(0, deck + 0.05, cz + 0.12, 1.15);
+  b.color('#34373a');
+  b.tube([[0, 0, -1.02], [0, 0, 1.02]], 0.014, 6);
+  b.color('#f2efe6');
+  const w = [0.028, 0.08, 0.095, 0.085, 0.05];
+  for (const e of [-1, 1])
+    for (let i = 0; i < 4; i++) {
+      const z0 = e * (1 + i * 0.085),
+        z1 = e * (1 + (i + 1) * 0.085);
+      b.quad2([-w[i], 0, z0], [-w[i + 1], 0, z1], [w[i + 1], 0, z1], [w[i], 0, z0]);
+    }
+  b.pop();
+  b.pop();
+}
+
 export function kayak(b: HB, x: number, z: number, yaw: number, ground: Ground, col: string): void {
+  if (shapeOn('shapekayak')) return kayakReal(b, x, z, yaw, ground, col);
   const gy = ground(x, z);
   b.pushT(x, Math.max(gy, WATER_LEVEL + 0.02) + 0.02, z, yaw);
   // pointed hull from stations

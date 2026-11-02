@@ -10,7 +10,7 @@ import * as THREE from 'three';
 import { GeoSink, Shaper } from '../vegetation/geo';
 import type { Rng } from '../../core/rng';
 import type { LampStyle } from './layout';
-import { boltY, boltZ, cbox, lathe, pixelText, poly, ring } from './shapes';
+import { boltY, boltZ, cbox, lathe, pixelText, poly, ring, smoothLathe } from './shapes';
 import { coverBackDraw, coverDraw, kioskSignDraw, phoneSignDraw, type Printer } from './print';
 import { markProp } from '../lettering/spots';
 
@@ -627,6 +627,47 @@ function hydrantKit(k: Kit, body: string): void {
 export function hydrant(k: Kit, yellow: boolean): void {
   const sh = k.sh;
   const body = yellow ? '#e3b23c' : '#c8352b';
+  if (HYD && shapeOn('shapehydrant')) {
+    k.m('#5a5f63', 'iron');
+    lathe(sh, 0, 0, [[0.165, 0], [0.165, 0.022], [0.14, 0.036], [0.118, 0.06]], 20);
+    k.m(body, 'paint');
+    smoothLathe(sh, 0, 0, [[0.114, 0.06], [0.108, 0.3], [0.105, 0.5], [0.112, 0.53]], 20);
+    lathe(sh, 0, 0, [[0.112, 0.53], [0.135, 0.545], [0.137, 0.585], [0.118, 0.6]], 20);
+    smoothLathe(sh, 0, 0, [[0.118, 0.6], [0.115, 0.635], [0.098, 0.672], [0.066, 0.698], [0.036, 0.708]], 20);
+    k.m('#4a4e52', 'iron');
+    lathe(sh, 0, 0, [[0.036, 0.708], [0.03, 0.722]], 10);
+    sh.cyl(0, 0.722, 0, 0.026, 0.024, 0.04, 5, 2);
+    k.m(body, 'paint');
+    sh.tube(-0.08, 0.38, 0, -0.19, 0.38, 0, 0.045, 0.045, 14, true);
+    sh.tube(0.08, 0.38, 0, 0.19, 0.38, 0, 0.045, 0.045, 14, true);
+    sh.tube(0, 0.33, 0.08, 0, 0.33, 0.2, 0.06, 0.06, 14, true);
+    k.m('#4a4e52', 'iron');
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 + 0.3;
+      sh.cyl(Math.cos(a) * 0.15, 0.022, Math.sin(a) * 0.15, 0.012, 0.012, 0.012, 6, 2);
+      sh.cyl(Math.cos(a) * 0.127, 0.585, Math.sin(a) * 0.127, 0.01, 0.01, 0.012, 6, 2);
+    }
+    k.m(body, 'paint');
+    for (const s of [1, -1]) sh.tube(s * 0.19, 0.38, 0, s * 0.228, 0.38, 0, 0.056, 0.056, 14, true);
+    sh.tube(0, 0.33, 0.2, 0, 0.33, 0.238, 0.074, 0.074, 14, true);
+    k.m('#3a3d40', 'iron');
+    for (const s of [1, -1]) sh.tube(s * 0.228, 0.38, 0, s * 0.255, 0.38, 0, 0.022, 0.022, 6, true);
+    sh.tube(0, 0.33, 0.238, 0, 0.33, 0.266, 0.026, 0.026, 6, true);
+    for (const s of [1, -1]) {
+      // a chain of links from each cap back to the barrel
+      for (let i = 0; i < 5; i++) {
+        const t = i / 4;
+        sh.box(s * (0.21 - t * 0.1), 0.33 - t * 0.06, 0.02 + t * 0.05, 0.012, 0.012, 0.012, 0);
+      }
+    }
+    for (let i = 0; i < 5; i++) {
+      const t = i / 4;
+      sh.box(0.03 + t * 0.04, 0.27 - t * 0.03, 0.22 - t * 0.12, 0.012, 0.012, 0.012, 0);
+    }
+    k.m('#f2f0ea', 'plastic');
+    sh.cyl(0, 0.47, 0, 0.1085, 0.107, 0.035, 20, 0);
+    return;
+  }
   if (HYD) {
     k.m('#5a5f63', 'iron');
     sh.cyl(0, 0, 0, 0.16, 0.16, 0.06, 12, 2);

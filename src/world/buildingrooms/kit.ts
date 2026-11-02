@@ -1,7 +1,12 @@
 // Small mesh kit for the room atlas (buildingrooms/atlas.ts): everything is seen from straight ahead (+z looks at the viewer) by an
 // orthographic camera, once, at boot. So a shape only needs the half that faces the viewer, and all of it goes into one vertex array.
 
+import { shapeOn } from '../../core/sweepshape';
+
 export type Col = readonly [number, number, number];
+
+/** atlas pages are drawn once at boot: round things can afford a round outline (a ball of 6 faces reads as a polygon through the glass) */
+const ROUND = shapeOn('shaperooms') ? 2 : 1;
 
 /** a colour from sRGB bytes written as 0xrrggbb, to linear */
 export function hex(h: number): Col {
@@ -69,6 +74,13 @@ export class Kit {
     this.quad([x0, y0, z, x1, y0, z, x1, y1, z, x0, y1, z], n, n, n, n, c);
   }
 
+  /** a flat triangle facing the viewer at depth z */
+  tri(x0: number, y0: number, x1: number, y1: number, x2: number, y2: number, z: number, c: Col): void {
+    this.v(x0, y0, z, 0, 0, 1, c);
+    this.v(x1, y1, z, 0, 0, 1, c);
+    this.v(x2, y2, z, 0, 0, 1, c);
+  }
+
   /** a box from the wall out: front, and its sloped-in edges so a box catches light on its arrises */
   box(x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: Col, bevel = 0.006): void {
     const b = Math.min(bevel, (x1 - x0) * 0.3, (y1 - y0) * 0.3);
@@ -88,6 +100,7 @@ export class Kit {
 
   /** a body of revolution about a vertical axis (x, z): profile [r, y] from bottom to top, the half facing the viewer */
   lathe(x: number, z: number, profile: readonly (readonly [number, number])[], c: Col, seg = 7): void {
+    seg *= ROUND;
     for (let i = 0; i + 1 < profile.length; i++) {
       const [r0, y0] = profile[i];
       const [r1, y1] = profile[i + 1];
@@ -114,6 +127,7 @@ export class Kit {
 
   /** a disc with its axis towards the viewer, slightly domed (a wheel of cheese, a plate, a clock, a tin's end) */
   disc(x: number, y: number, z: number, r: number, c: Col, dome = 0.3, seg = 12): void {
+    seg *= ROUND;
     for (let s = 0; s < seg; s++) {
       const a0 = (s / seg) * Math.PI * 2,
         a1 = ((s + 1) / seg) * Math.PI * 2;
@@ -128,6 +142,7 @@ export class Kit {
 
   /** an ellipsoid's front half */
   ball(x: number, y: number, z: number, rx: number, ry: number, rz: number, c: Col, seg = 7): void {
+    seg *= ROUND;
     const rows = Math.max(3, seg - 2);
     for (let j = 0; j < rows; j++) {
       const t0 = -Math.PI / 2 + (Math.PI * j) / rows,

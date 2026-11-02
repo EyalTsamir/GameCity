@@ -23,7 +23,7 @@ Cost, measured by switching `live` in one page (`abprof`, 6 cycles, ms, on mains
 | `?noshapekiosk` | kiosk keeper and ice-cream tubs |
 | `?noshapeboards` | rescue boards with nose lift, rails, skeg |
 | `?noshapebandstand` | bentwood chairs and music stands, iron grilles |
-| `?noshapebench` | cast curved bench ends, a real water butt |
+| `?noshapebench` | modern benches on a welded frame with wooden backs (they had taken the screws' colour), cast curved bench ends, a real water butt |
 | `?noshapedrums` | spun steel drums on the quay |
 | `?noshapecontainer` | corrugated container skin, castings, door gear, near only |
 | `?noshapefowl` | swans and ducks in one smooth skin, folded wings, shaped head and bill |
@@ -33,14 +33,14 @@ Cost, measured by switching `live` in one page (`abprof`, 6 cycles, ms, on mains
 | `?noshapeforklift` | forklift bodywork, near only |
 | `?noshapemarket` | honey jars and cheese wheels off a lathe |
 | `?noshapeturbine` | turbine door, landing and stair |
-| `?noshapegarden` | parasols, patio chairs and tables, inflatable pools, loungers, wheelie bin mouldings, compost bins |
+| `?noshapegarden` | gas grills, ride-on toys, sandpits, shed water butts, playhouses with shiplap, windows, a heart in the door and a flag, kennels with an arched door, name and bowl, trampolines with a soft pad, fire pits in split stone with stumps, parasols, patio chairs and tables, inflatable pools, loungers, wheelie bin mouldings, compost bins |
 | `?noshapeladders` | round iron ladders with bends, stand-offs, flanges, a tide line |
 | `?noshapemast` | harbour floodlight masts in spun sections with collars, door and bolted foot |
-| `?noshapereefer` | the fish quay's chilled container: door leaves with gaskets, ribs, kick plates and hinges, round locking rods with cams and handles; fan guards, louvres, controller and mains lead on the unit |
+| `?noshapereefer` | also: tyres on the quay wall round with tread and a chain, cast bollards at 24 sides; the fish quay's chilled container: door leaves with gaskets, ribs, kick plates and hinges, round locking rods with cams and handles; fan guards, louvres, controller and mains lead on the unit |
 | `?noshapefingerpost` | fingerpost: cast post painted black and white, collars, finial, rimmed arms with real letters |
 | `?noshapelamp` | lamp columns near only: rounder skin, weld seam, chipped and rusting foot, tape and staples of old notices, survey marks |
 | `?noshapenotice` | notices on lamp posts: ties that go round the post, a lifted corner, a strip of an older notice |
-| `?noshapebike` | bikes in tube rather than bar, one round tyre and rim, saddles and grips; bike-row hoops as one bent tube on flanges |
+| `?noshapebike` | parked and ridden bikes up close: a real saddle, a swept bar, a round lamp; bikes in tube rather than bar, one round tyre and rim, saddles and grips; bike-row hoops as one bent tube on flanges |
 | `?noshapereel` | cable reels: planked flanges with battens, a bushed axle hole, the cable's loose end on the ground |
 | `?noshapetimber` | timber stacks: boards with ends and seams; the wrap with soft edges, folds, wrinkles, steel bands and a label instead of a blue block |
 | `?noshapegas` | gas bottles off a press with foot ring, shoulder band and valve guard, a chain across the cage |
@@ -52,6 +52,18 @@ Cost, measured by switching `live` in one page (`abprof`, 6 cycles, ms, on mains
 | `?noshapeshed` | shed roofs in lapped felt with nails, fascia, drip edge and moss, near only; pots off a wheel |
 | `?noshapevan` | the ice-cream van's hatch: framed, a sliding pane, a counter on brackets, lit wall, tubs, cones, a price board |
 | `?noshapeboat` | every boat's navigation lamps round instead of coloured cubes; the crabber's roof: scanner, rail, hatch, vents, life raft |
+| `?noshapebirds` | gulls and every bird: rounder body, smooth head, wings with a bowed leading edge and a feathered trailing edge, no gap at the elbow |
+| `?noshapestones` | headstones with shaped heads, a cut border, a roundel and lines of inscription |
+| `?noshapebooks` | book spines on the cart with gilt bands or small labels |
+| `?noshapepapers` | kiosk newspapers: printed front pages, the fold down the edge, twine |
+| `?noshaperooms` | **shop windows**: each trade its own display in the room atlas (`buildingrooms/windows.ts`): a chemist's show globes where the blue and green cones stood, pump bottles, a board; an optician's busts in glasses, an eye chart and giant glasses on wires; a rocking horse, alphabet blocks and a bear, a dolls' house, a kite and a train in toy shops; hats on stands; shoes on steps; spade, fork, hose, watering can and steps at the hardware shop; parcels and a pillar box at the post office; a bronze head, a pierced stone and an easel, a glazed jar and a bowl in galleries; a mantel clock, candlesticks and a globe in antiques; sleeves and a record player in record shops; mannequins with a waist and hats with brims. Round outlines in the whole atlas at twice the faces. All of it is drawn once at boot: no triangles per frame |
+| `?noshapepit` | tree pits: setts flush with the paving in worn granite on a mortar bed, no white cubes standing proud |
+| `?noshapekayak` | beach kayaks: a rockered hull with a section and a crowned deck, a coaming round a real cockpit, seat, deck lines, a paddle with blades |
+| `?noshapehydrant` | hydrants off a casting: flanges with a section, a round dome, an iron pentagon nut, bolts, chains of links |
+| `?noshapevending` | vending machines: soft body; near only a door in its frame, shelves of cans and bottles, keys, a slot, a push flap, feet |
+| `?noshapeibc` | liquid tanks: near only a cage of round bars, tank ribs, feet, valve, filler with clips, a label |
+| `?noshapedumpster` | dumpsters: soft body, round castors; near only pressed ribs, rolled rim, trunnions, fork pockets, lid ribs and handles, a number, scrapes |
+| `?noshaperope` | rope coils: a heap from afar, turn by turn near with the free end across the ground |
 
 The sacks (filled, `softBlob`) sit under the older `?nohandyard`.
 
@@ -75,6 +87,6 @@ No time cost readable within the noise (the earlier baseline-first market 51.71 
 
 ## Left on the list
 
-Hedges and lawns are the foliage and ground families. People are the people session's. Still plain: the fish quay's chilled container, the fingerpost, the notice on a lamp post, plain concrete footings in the freight yard, the square post on the boardwalk (`harbor-beach`, not traced), the warehouse doors in `cs-wall-warehouse`, garden sheds' flat roofs, the bird bath, the lighthouse plinth, the fishing boat. Pigeons at 1 m were left as they are; at 3 m they read as birds.
+Hedges and lawns are the foliage and ground families. People are the people session's (`ped-*`, and the people in `veh-*`). Still plain, from the `shape` list: `room-office`, wall stock in the toy and record shops (labelled boxes), the fish quay's ice (grey chunks), nets, boat fenders, the river tour boat's helm and stool, the lorry cab's side, the promenade railing's square post, freight-yard footings, palm trunks, pipes, sleepers, the named buildings' parts, greenhouse plants, the cat and pigeon.
 
 Scripts used, worth keeping in mind: a raycast from the page (import three from the resource list, `mesh.raycast`, print the mesh name) names what a frame shows faster than reading code.

@@ -2,6 +2,7 @@
 // (buildingrooms/atlas.ts). A function fills the width x0..x1 of one shelf whose board top is at height y, under a clear height h, with
 // its front face no further out than zf. Everything is drawn once at boot and looked at from straight ahead.
 
+import { shapeOn } from '../../core/sweepshape';
 import { hex, mixc, shade, type Col, type Kit } from './kit';
 
 type R = () => number;
@@ -182,7 +183,16 @@ export function baguettes(k: Kit, r: R, x0: number, x1: number, y: number, h: nu
   run(r, x0 + 0.03, x1 - 0.03, () => 0.055, (x, w) => {
     const hh = Math.min(h * 0.92, 0.45 + r() * 0.2);
     const lean = (r() - 0.5) * 0.08;
-    k.bar(x + w / 2, y, x + w / 2 + lean, y + hh, zf - 0.08, 0.026, pick(r, crust));
+    const c = pick(r, crust);
+    k.bar(x + w / 2, y, x + w / 2 + lean, y + hh, zf - 0.08, 0.026, c);
+    if (shapeOn('shaperooms')) {
+      // a stick has a tip and cuts in its crust
+      k.ball(x + w / 2 + lean, y + hh, zf - 0.08, 0.026, 0.05, 0.026, c, 6);
+      for (let i = 1; i < 5; i++) {
+        const t = 0.45 + i * 0.1;
+        k.bar(x + w / 2 + lean * t - 0.012, y + hh * t - 0.012, x + w / 2 + lean * t + 0.012, y + hh * t + 0.012, zf - 0.054, 0.003, mixc(c, hex(0xf0dcae), 0.7));
+      }
+    }
   }, 0.05);
   k.box(x0 + 0.02, y, zf - 0.04, x1 - 0.02, y + 0.16, zf, hex(0x8a6236), 0.01);
   for (let i = 0; i < 4; i++) k.rect(x0 + 0.02, y + 0.02 + i * 0.035, x1 - 0.02, y + 0.03 + i * 0.035, zf + 0.001, hex(0x5e4023));

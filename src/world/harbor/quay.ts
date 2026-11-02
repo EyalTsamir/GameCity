@@ -550,6 +550,30 @@ export function stain(b: HB, x: number, y: number, z: number, w: number, d: numb
 /** hanging tyre on the quay wall face (x = wall), chain to an eye on the coping */
 function wallTyre(b: HB, wallX: number, y: number, z: number): void {
   b.color('#151617').pat(PAT.NONE);
+  if (shapeOn('shapereefer')) {
+    // tread blocks round the tyre, a chain of links to the eye
+    const X = wallX + 0.14,
+      Y = y - 0.5;
+    const ringPts = (R: number, x0: number): V3[] => {
+      const p: V3[] = [];
+      for (let k = 0; k < 36; k++) p.push([x0, Y + Math.cos((k / 36) * Math.PI * 2) * R, z + Math.sin((k / 36) * Math.PI * 2) * R]);
+      return p;
+    };
+    b.tube(ringPts(0.3, X), 0.12, 10, true);
+    b.color('#232527');
+    b.tube(ringPts(0.3, X + 0.1), 0.028, 5, true);
+    b.color('#0d0e0f');
+    for (let k = 0; k < 24; k++) {
+      const a = (k / 24) * Math.PI * 2;
+      b.box(X, Y + Math.cos(a) * 0.418, z + Math.sin(a) * 0.418, 0.17, 0.012, 0.022, 0, 0);
+    }
+    b.color('#4a3a30');
+    for (let k = 0; k < 7; k++) {
+      const t = k / 6;
+      b.box(wallX + 0.16 - t * 0.11, y - 0.18 + t * 0.23, z, k % 2 ? 0.012 : 0.03, 0.038, k % 2 ? 0.03 : 0.012, 0, 0);
+    }
+    return;
+  }
   torusTube(b, wallX + 0.14, y - 0.5, z, 0.3, 0.12, 'x', 16);
   b.color('#4a3a30');
   b.cyl([wallX + 0.16, y - 0.18, z], [wallX + 0.05, y + 0.05, z], 0.015, 0.015, 4, 0);

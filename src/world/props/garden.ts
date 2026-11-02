@@ -480,6 +480,67 @@ export function playhouse(k: Kit, rng: Rng, w: number, d: number): void {
   sh.box(0, 0.45, d * 0.4 + 0.01, 0.42, 0.8, 0.02, 0);
   k.m(roof, 'paint');
   sh.box(0, 0.45, d * 0.4 + 0.02, 0.34, 0.72, 0.02, 0);
+  if (!shapeOn('shapegarden')) return;
+  // shiplap all round, a window with a sill and a pot in each side, a heart in the door, a knob, a ridge and a flag; it was a blank wall
+  const hw = w * 0.4,
+    hd = d * 0.4;
+  k.m(wall, 'wood');
+  k.s.r *= 0.72;
+  k.s.g *= 0.72;
+  k.s.b *= 0.72;
+  for (let y = 0.14; y < H - 0.02; y += 0.14) {
+    sh.box(hw + 0.002, y, 0, 0.004, 0.012, d * 0.8, 0);
+    sh.box(-hw - 0.002, y, 0, 0.004, 0.012, d * 0.8, 0);
+    sh.box(0, y, -hd - 0.002, w * 0.8, 0.012, 0.004, 0);
+    for (const sx of [-1, 1]) sh.box(sx * (0.21 + (hw - 0.21) / 2), y, hd + 0.002, hw - 0.21, 0.012, 0.004, 0);
+  }
+  k.m('#ffffff', 'paint');
+  for (const sx of [-1, 1]) {
+    sh.box(sx * (hw + 0.008), 0.72, 0, 0.012, 0.42, 0.42, 0);
+    sh.box(sx * (hw + 0.02), 0.5, 0, 0.05, 0.022, 0.48, 0);
+    k.m('#39474e', 'glass');
+    sh.box(sx * (hw + 0.016), 0.72, 0, 0.004, 0.34, 0.34, 0);
+    k.m('#ffffff', 'paint');
+    sh.box(sx * (hw + 0.02), 0.72, 0, 0.004, 0.34, 0.022, 0);
+    sh.box(sx * (hw + 0.02), 0.72, 0, 0.004, 0.022, 0.34, 0);
+    k.m('#b8643f', 'ceramic');
+    sh.cyl(sx * (hw + 0.024), 0.512, 0.1, 0.028, 0.038, 0.05, 8, 2);
+    k.m(rng.pick(['#d9473f', '#e8a33c', '#c65aa8']), 'plastic');
+    sh.ellipsoid(sx * (hw + 0.024), 0.585, 0.1, 0.04, 0.035, 0.04, 0);
+    k.m('#ffffff', 'paint');
+  }
+  k.m('#e8c44a', 'steel');
+  sh.ellipsoid(0.12, 0.45, hd + 0.04, 0.018, 0.018, 0.012, 0);
+  // a round window at the back
+  k.m('#ffffff', 'paint');
+  sh.ellipsoid(0, 0.72, -hd - 0.004, 0.17, 0.17, 0.004, 0);
+  k.m('#39474e', 'glass');
+  sh.ellipsoid(0, 0.72, -hd - 0.009, 0.135, 0.135, 0.003, 0);
+  k.m('#ffffff', 'paint');
+  sh.box(0, 0.72, -hd - 0.012, 0.27, 0.02, 0.004, 0);
+  sh.box(0, 0.72, -hd - 0.012, 0.02, 0.27, 0.004, 0);
+  // a heart cut in the door
+  k.m('#1d1a18', 'paint');
+  for (const sx of [-1, 1]) sh.ellipsoid(sx * 0.026, 0.68, hd + 0.03, 0.032, 0.032, 0.003, 0);
+  sh.push().local(0, 0.65, hd + 0.03, 0, 0, Math.PI / 4).box(0, 0, 0, 0.045, 0.045, 0.004, 0).pop();
+  // the ridge
+  k.m(roof, 'paint');
+  k.s.r *= 0.8;
+  k.s.g *= 0.8;
+  k.s.b *= 0.8;
+  sh.tube(0, R + 0.075, -d * 0.45, 0, R + 0.075, d * 0.45, 0.028, 0.028, 8);
+  // a flag on the gable
+  k.m('#7d868d', 'steel');
+  sh.tube(0, R + 0.08, hd + 0.03, 0, R + 0.45, hd + 0.03, 0.007, 0.007, 5);
+  k.m(rng.pick(['#e8a33c', '#d9473f', '#2f7fb8']), 'plastic');
+  const f0 = sh.v(0, R + 0.45, hd + 0.03, 0, 0, 1),
+    f1 = sh.v(0, R + 0.32, hd + 0.03, 0, 0, 1),
+    f2 = sh.v(0.17, R + 0.385, hd + 0.03, 0, 0, 1),
+    f3 = sh.v(0, R + 0.45, hd + 0.03, 0, 0, -1),
+    f4 = sh.v(0, R + 0.32, hd + 0.03, 0, 0, -1),
+    f5 = sh.v(0.17, R + 0.385, hd + 0.03, 0, 0, -1);
+  s.tri(f1, f2, f0);
+  s.tri(f4, f3, f5);
 }
 
 /** Small dog kennel (faces +Z). */
@@ -499,6 +560,44 @@ export function kennel(k: Kit, rng: Rng): void {
   }
   k.m('#3b3a38', 'stone');
   for (const sx of [-1, 1]) sh.push().local(sx * 0.18, 0.79, 0, 0, 0, -sx * 0.64).box(0, 0, 0, 0.5, 0.04, 0.95, 0).pop();
+  if (shapeOn('shapegarden')) {
+    // weatherboards, an arched door with a frame, a name, a ridge, a bowl with something in it
+    k.m(c, 'wood');
+    k.s.r *= 0.68;
+    k.s.g *= 0.68;
+    k.s.b *= 0.68;
+    for (let y = 0.1; y < 0.62; y += 0.1) {
+      for (const sx of [-1, 1]) sh.box(sx * 0.352, y, 0, 0.004, 0.01, 0.85, 0);
+      sh.box(0, y, -0.427, 0.7, 0.01, 0.004, 0);
+      if (y > 0.56) sh.box(0, y, 0.427, 0.7, 0.01, 0.004, 0);
+      else for (const sx of [-1, 1]) sh.box(sx * 0.26, y, 0.427, 0.18, 0.01, 0.004, 0);
+    }
+    k.m(c, 'wood');
+    k.s.r *= 1.2;
+    k.s.g *= 1.2;
+    k.s.b *= 1.2;
+    sh.box(-0.17, 0.2, 0.432, 0.03, 0.4, 0.012, 0);
+    sh.box(0.17, 0.2, 0.432, 0.03, 0.4, 0.012, 0);
+    sh.push().local(0, 0.4, 0.431, Math.PI / 2);
+    sh.cyl(0, -0.008, 0, 0.185, 0.185, 0.014, 18, 2);
+    sh.pop();
+    k.m('#141414', 'rubber');
+    sh.box(0, 0.2, 0.436, 0.31, 0.4, 0.006, 0);
+    sh.push().local(0, 0.4, 0.436, Math.PI / 2);
+    sh.cyl(0, -0.004, 0, 0.155, 0.155, 0.009, 18, 2);
+    sh.pop();
+    k.m('#d8cfb8', 'wood');
+    sh.box(0, 0.68, 0.432, 0.26, 0.06, 0.012, 0);
+    k.m('#2a2622', 'paint');
+    for (let i = 0; i < 3; i++) sh.box(-0.07 + i * 0.07, 0.68, 0.439, 0.045, 0.022, 0.002, 0);
+    k.m('#2d2c2a', 'stone');
+    sh.tube(0, 0.905, -0.47, 0, 0.905, 0.47, 0.022, 0.022, 7);
+    k.m('#b8643f', 'ceramic');
+    lathe(sh, 0.22, 0.62, [[0.09, 0], [0.11, 0.05], [0.115, 0.065], [0.095, 0.065], [0.08, 0.02]], 16);
+    k.m('#6b4a2c', 'plastic');
+    sh.disc(0.22, 0.04, 0.62, 0.085, 14, 1);
+    return;
+  }
   k.m('#1b1b1b', 'rubber');
   sh.box(0, 0.25, 0.43, 0.3, 0.38, 0.01, 0);
   k.m('#b8643f', 'ceramic');
@@ -556,12 +655,22 @@ export function trampoline(k: Kit, rng: Rng): void {
       z = Math.sin(a) * (R - 0.05);
     sh.tube(x * 1.04, 0, z * 1.04, x, Y, z, 0.03, 0.03, 4);
   }
+  const roundTramp = shapeOn('shapegarden');
   k.m('#7d868d', 'steel');
-  sh.cyl(0, Y - 0.05, 0, R, R, 0.06, 16, 0);
+  sh.cyl(0, Y - 0.05, 0, R, R, 0.06, roundTramp ? 36 : 16, 0);
   k.m(pad, 'plastic');
-  sh.cyl(0, Y, 0, R + 0.08, R + 0.04, 0.07, 16, 2);
-  k.m('#1d1f22', 'rubber');
-  sh.disc(0, Y + 0.075, 0, R - 0.26, 16, 1);
+  if (roundTramp) {
+    // the safety pad's soft roll over the springs, the mat inside it with its stitched ring
+    smoothLathe(sh, 0, 0, [[R + 0.05, Y - 0.005], [R + 0.09, Y + 0.035], [R + 0.05, Y + 0.075], [R - 0.08, Y + 0.09], [R - 0.26, Y + 0.078]], 36);
+    k.m('#1d1f22', 'rubber');
+    sh.disc(0, Y + 0.075, 0, R - 0.25, 36, 1);
+    k.m('#3a3d40', 'rubber');
+    lathe(sh, 0, 0, [[R - 0.38, Y + 0.0775], [R - 0.36, Y + 0.0775]], 36);
+  } else {
+    sh.cyl(0, Y, 0, R + 0.08, R + 0.04, 0.07, 16, 2);
+    k.m('#1d1f22', 'rubber');
+    sh.disc(0, Y + 0.075, 0, R - 0.26, 16, 1);
+  }
   if (rng.chance(0.75)) {
     k.m('#2d3236', 'steel');
     const n = 8,
@@ -1154,6 +1263,55 @@ export function birdbath(k: Kit, rng: Rng): void {
 /** Fire pit with log seats. */
 export function firepit(k: Kit, rng: Rng): void {
   const sh = k.sh;
+  if (shapeOn('shapegarden')) {
+    // a ring of split stones in two courses with caps, ash in the bottom, charred logs laid across, stumps round it
+    const stones = 14;
+    k.m('#34302c', 'stone');
+    lathe(sh, 0, 0, [[0.48, 0], [0.47, 0.26]], 24);
+    for (let c = 0; c < 2; c++) {
+      for (let i = 0; i < stones; i++) {
+        const a = ((i + c * 0.5) / stones) * TAU;
+        k.m(rng.pick(['#6b665f', '#5f5a55', '#756f66', '#58534d']), 'stone');
+        sh.push().local(Math.cos(a) * 0.46, 0.07 + c * 0.13, Math.sin(a) * 0.46, 0, -a);
+        sh.box(0, 0, 0, 0.11, 0.115 + rng.range(-0.01, 0.01), 0.195, 1);
+        sh.pop();
+      }
+    }
+    for (let i = 0; i < stones; i++) {
+      const a = ((i + 0.25) / stones) * TAU;
+      k.m(rng.pick(['#7c776e', '#8a857b', '#6f6a62']), 'stone');
+      sh.push().local(Math.cos(a) * 0.46, 0.27, Math.sin(a) * 0.46, 0, -a);
+      sh.box(0, 0, 0, 0.17, 0.035, 0.205, 1);
+      sh.pop();
+    }
+    k.m('#2a2725', 'stone');
+    sh.disc(0, 0.12, 0, 0.39, 18, 1);
+    k.m('#807b74', 'stone');
+    softBlob(sh, 0, 0.12, 0, 0.27, 0.03, 0.27, 0.32, 0.6, 0.15, 3, 4, 10);
+    const lit = rng.chance(0.6);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * TAU + 0.4;
+      k.m('#1c1815', 'wood');
+      sh.tube(Math.cos(a) * 0.27, 0.15, Math.sin(a) * 0.27, -Math.cos(a) * 0.1, 0.22, -Math.sin(a) * 0.1, 0.035, 0.03, 7);
+    }
+    if (lit) {
+      k.e('#3a2a20', '#ff8a3a', 0.9, 0);
+      sh.ellipsoid(0, 0.17, 0, 0.13, 0.035, 0.13, 0);
+    }
+    const seats = rng.int(3, 4);
+    for (let i = 0; i < seats; i++) {
+      const a = (i / seats) * TAU + rng.range(-0.2, 0.2);
+      const x = Math.cos(a) * 1.05,
+        z = Math.sin(a) * 1.05;
+      k.m('#5e4632', 'wood');
+      lathe(sh, x, z, [[0.21, 0], [0.185, 0.06], [0.18, 0.38]], 14);
+      k.m('#c2a173', 'wood');
+      sh.disc(x, 0.38, z, 0.17, 14, 1);
+      k.m('#a5835a', 'wood');
+      lathe(sh, x, z, [[0.1, 0.3815], [0.095, 0.3815]], 14);
+    }
+    return;
+  }
   k.m('#5f5a55', 'stone');
   sh.cyl(0, 0, 0, 0.5, 0.48, 0.28, 10, 0);
   k.m('#1d1a18', 'stone');
