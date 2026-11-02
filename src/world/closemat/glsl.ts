@@ -722,9 +722,13 @@ void cmSlab(vec2 p, vec2 q, float frame, vec2 size, out vec2 cell, out float edg
 const HARD_MAIN = /* glsl */ `
   vec3 N = normalize(vN);
   vec2 p = vP.xz;
+  float frame = vS.w;
+#ifdef CM_MATRISER
+  // the riser of a pad or a step: seen from above its coordinates stand still across it, and everything drew as vertical stripes
+  if (frame < 1.5 && abs(N.y) < 0.6) p = vec2(abs(N.x) > abs(N.z) ? vP.z : vP.x, vP.y);
+#endif
   gx = dFdx(p);
   gy = dFdy(p);
-  float frame = vS.w;
   // a kerb: along it and across it, so a vertical face gets a surface as well (height and distance from the kerb)
   vec2 uv = frame < 0.5 ? p : (frame < 1.5 ? p.yx : vec2(vS.y, vP.y + min(vS.x, 3.0)));
   vec2 ug = frame < 0.5 ? gx : (frame < 1.5 ? gx.yx : vec2(dFdx(vS.y), dFdx(vP.y + min(vS.x, 3.0))));

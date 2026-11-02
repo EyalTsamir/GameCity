@@ -5,6 +5,9 @@
 //   matframe    the close-up layer's coordinate lies in the facet, so round things have no smeared seam and no multiplied texture
 //   mattop      a crop's top strip is not drawn from under it (flower heads as slabs across the sky)
 //   mathedge    a clipped hedge up close is leaves, not camouflage
+//   matriser    the riser of a pad or step has a surface of its own, in both the paving's shader and the close-up layer (vertical stripes)
+//   matcloth    no polka dots or prints on a suit or a coat
+//   matsticker  fewer stickers on painted metal: on a wall of steel they read as noise
 //   matsiding   timber siding is boards 18 cm wide, not 30 (far and near shader)
 //   matboard    a board on a post has a body: an edge, and no AO from what stands behind it
 

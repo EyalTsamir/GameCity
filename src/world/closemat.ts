@@ -188,6 +188,7 @@ export default function create(ctx: CityContext): CityModule {
   if (wearFix(ctx.quality.level, 'wearrust')) wearDefs.CM_WEARRUST = 1;
   if (matFix(ctx.quality.level, 'matclass')) wearDefs.CM_MATCLASS = 1;
   if (matFix(ctx.quality.level, 'matframe')) wearDefs.CM_MATFRAME = 1;
+  if (matFix(ctx.quality.level, 'matriser')) wearDefs.CM_MATRISER = 1;
   const material = (name: string, frag: string, define: string, radius: number, offset: number): THREE.ShaderMaterial =>
     new THREE.ShaderMaterial({
       name: `closemat-${name}`,

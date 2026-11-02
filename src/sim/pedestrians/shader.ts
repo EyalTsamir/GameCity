@@ -9,6 +9,7 @@
 // Colours: each vertex resolves its region's colours (skin, top, outer, bottom, legwear, shoes…)
 // and the nearest hem boundary; the fragment shader picks the side per pixel (crisp hems).
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import { detailPeople } from '../../core/detailPeople';
 import { globalUniforms } from '../../core/uniforms';
@@ -1014,7 +1015,7 @@ vec3 pedPrint(vec3 pc, float topK) {
   bool tail = abs(vPedReg - ${R.TAIL}.0) < 0.5;
   bool torso = abs(vPedReg - ${R.TORSO}.0) < 0.5;
   if (!tail && !torso && abs(vPedReg - ${R.ARM}.0) > 0.5) return pc;
-  float k = tail ? 1.0 : topK;
+${matOn('matcloth') ? '  if ((vPedFB & 128u) != 0u && !tail && pt != 2u) return pc; // (a jacket is a jacket: dots and stripes are for what is under it)\n' : ''}  float k = tail ? 1.0 : topK;
   if (k <= 0.0) return pc;
   float lum = dot(pc, vec3(0.3, 0.55, 0.15));
   if (lum > 0.62) return pc; // (a bride, a white shirt)

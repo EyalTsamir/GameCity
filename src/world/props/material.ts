@@ -4,6 +4,7 @@
 //   mode 1 — always lit (subtle day emission, e.g. LED panels)
 // Small props never cast shadows; they receive them.
 
+import { matOn } from '../../core/sweepmat';
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
@@ -112,7 +113,7 @@ void pWear(inout vec3 col, inout float rgh, inout float mtl, vec3 pw, vec3 n) {
       vec2 sc = floor(vec2(uvp.x / 0.13, uvp.y / 0.11));
       float h = fract(sin(dot(sc, vec2(127.1, 311.7))) * 43758.5453);
       vec2 f = fract(vec2(uvp.x / 0.13, uvp.y / 0.11));
-      float stk = step(0.988, h) * step(0.15, f.x) * step(f.x, 0.85) * step(0.15, f.y) * step(f.y, 0.85) * fine;
+      float stk = step(${matOn('matsticker') ? '0.9965' : '0.988'}, h) * step(0.15, f.x) * step(f.x, 0.85) * step(0.15, f.y) * step(f.y, 0.85) * fine;
       vec3 sCol = h > 0.997 ? vec3(0.85, 0.2, 0.15) : (h > 0.993 ? vec3(0.95, 0.85, 0.2) : vec3(0.92, 0.92, 0.9));
       col = mix(col, sCol, stk);
       rgh = mix(rgh, 0.6, stk);

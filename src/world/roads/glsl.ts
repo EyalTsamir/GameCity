@@ -14,6 +14,7 @@
 // Everything thin is box-filtered with fwidth (rdLine) so lines fade into their mean tone with
 // distance; macro tones (10-25 %) are not faded — that is what keeps the ground readable from afar.
 
+import { matOn } from '../../core/sweepmat';
 import { CORRIDOR_HALF, XS, ZS } from '../../core/constants';
 
 const XS0 = XS[0].toFixed(1),
@@ -366,7 +367,12 @@ float rdHerring(vec2 q, out vec2 cell) {
 }
 vec3 rdHard(inout float rough) {
   vec2 p = vWP.xz;
-  vec2 fwp = fwidth(p);
+${matOn('matriser') ? `  if (vS.w < 1.5) {
+    // the riser of a pad or a step (see the close-up layer)
+    vec3 fn = cross(dFdx(vWP), dFdy(vWP));
+    if (fn.y * fn.y < 0.36 * dot(fn, fn)) p = vec2(abs(fn.x) > abs(fn.z) ? vWP.z : vWP.x, vWP.y);
+  }
+` : ''}  vec2 fwp = fwidth(p);
   float fwm = max(fwp.x, fwp.y) + 1e-5;
   float fwu = fwidth(vS.y) + 1e-5;
   float fwd = fwidth(vS.x) + 1e-5;
