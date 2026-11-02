@@ -274,6 +274,8 @@ float rmSunAt(vec3 p, vec3 Lr, vec4 wr, vec3 W0, vec3 Tu, vec3 N, float cross) {
 }
 #endif
 
+// (black adds nothing: no discard, which would keep the depth test from running before the shader)
+#define CW_NONE { gl_FragColor = vec4(0.0); return; }
 void main() {
   vec2 T2 = vDir.xy;
   vec3 Tu = vec3(T2.x, 0.0, T2.y);
@@ -283,7 +285,7 @@ void main() {
   vec3 ey = vW - uNearEye;
   float cwR = uCwRadius * uNearLens;
   float near = 1.0 - smoothstep(cwR * 0.7, cwR, length(ey));
-  if (near <= 0.0 || vn <= 0.0) discard;
+  if (near <= 0.0 || vn <= 0.0) CW_NONE;
 
   float style = floor(vKind.x + 0.5), prof = floor(vKind.y + 0.5);
   bool curtain = style > 1.5 && style < 2.5, ribbon = style > 2.5 && style < 3.5;
@@ -302,8 +304,8 @@ void main() {
   float revD = (curtain ? 0.0 : (style > 6.5 ? 0.07 : (shopWin ? 0.09 : (ribbon ? 0.06 : (style > 3.5 && style < 4.5 ? 0.1 : 0.14))))) * depthK;
   vec3 rd0 = vec3(dot(V, Tu), V.y, max(vn, 0.04));
   vec2 pm = vQ + rd0.xy / max(rd0.z, 0.06) * revD;
-  if (pm.x < wrR.x || pm.x > wrR.y || pm.y < wrR.z || pm.y > wrR.w) discard;
-  if (pm.y >= vKind.z) discard;
+  if (pm.x < wrR.x || pm.x > wrR.y || pm.y < wrR.z || pm.y > wrR.w) CW_NONE;
+  if (pm.y >= vKind.z) CW_NONE;
 
   vec2 wc = vec2(wrR.x + wrR.y, wrR.z + wrR.w) * 0.5;
   vec2 wh = vec2(wrR.y - wrR.x, wrR.w - wrR.z) * 0.5;
@@ -313,7 +315,7 @@ void main() {
     float r = wh.x;
     float yc = wrR.w - r;
     if (pm.y > yc) edge = min(pm.x - wrR.x, min(wrR.y - pm.x, r - length(vec2(pm.x - wc.x, pm.y - yc))));
-    if (edge < 0.0) discard;
+    if (edge < 0.0) CW_NONE;
   }
   float fw = ribbon ? 0.045 : 0.075;
   float frame = 1.0 - smoothstep(fw * 0.7, fw, edge);
@@ -350,7 +352,7 @@ void main() {
     frame = max(frame, mv);
   }
   float gk = 1.0 - frame;
-  if (gk <= 0.0) discard;
+  if (gk <= 0.0) CW_NONE;
 
   // ── the room: which face the ray meets
   float W = vRoom.x, H = vRoom.y, D = vRoom.z;
