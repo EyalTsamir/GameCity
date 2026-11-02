@@ -561,11 +561,21 @@ export function clockPost(ks: Kit): void {
 /** Taxi rank sign: post with a yellow TAXI box (lit at night). */
 export function taxiSign(k: Kit): void {
   const sh = k.sh;
+  const lettered = shapeOn('shapevending');
   k.m('#3a3f44', 'paint');
-  sh.cyl(0, 0, 0, 0.06, 0.05, 2.5, 6, 0);
+  sh.cyl(0, 0, 0, 0.06, 0.05, 2.5, lettered ? 14 : 6, 0);
   k.e('#f2c84b', '#ffe08a', 1.1);
-  sh.box(0, 2.6, 0, 0.7, 0.28, 0.16, 0);
+  if (lettered) cbox(sh, 0, 2.6, 0, 0.7, 0.28, 0.16, 0.02, 0);
+  else sh.box(0, 2.6, 0, 0.7, 0.28, 0.16, 0);
   k.m('#1d1f22', 'paint');
+  if (lettered) {
+    for (const f of [1, -1]) {
+      sh.push().local(0, 0, 0, 0, f > 0 ? 0 : Math.PI);
+      pixelText(sh, 'TAXI', 0, 2.565, 0.081, 0.024, 0.002, true);
+      sh.pop();
+    }
+    return;
+  }
   sh.box(0, 2.6, 0.082, 0.5, 0.1, 0.005, 0);
   sh.box(0, 2.6, -0.082, 0.5, 0.1, 0.005, 0);
 }
@@ -652,6 +662,36 @@ export function vending(k: Kit, rng: Rng, kd?: Kit): void {
 export function trolleys(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const n = rng.int(3, 6);
+  if (shapeOn('shapetrolley')) {
+    // bent tube and wire, a sprung handle, four real wheels, nested as they are left
+    for (let i = 0; i < n; i++) {
+      const x = -1.0 + i * 0.38,
+        t = rng.range(-0.015, 0.015);
+      sh.push().local(x, 0, t, 0, rng.range(-0.02, 0.02));
+      k.m('#a4adb2', 'steel');
+      for (const sd of [-0.15, 0.15]) {
+        sh.tube(sd, 0.18, 0.32, sd, 0.18, -0.26, 0.012, 0.012, 6);
+        sh.tube(sd, 0.18, -0.26, sd * 0.93, 0.98, -0.34, 0.012, 0.012, 6);
+        sh.tube(sd, 0.18, 0.32, sd, 0.28, 0.34, 0.009, 0.009, 5);
+        sh.tube(sd, 0.18, 0.1, sd, 0.08, 0.14, 0.012, 0.012, 5);
+        sh.tube(sd, 0.18, -0.2, sd, 0.08, -0.2, 0.012, 0.012, 5);
+      }
+      for (let q = 0; q < 6; q++) sh.tube(-0.15, 0.18, -0.24 + q * 0.11, 0.15, 0.18, -0.24 + q * 0.11, 0.004, 0.004, 3);
+      for (const y of [0.38, 0.58, 0.78]) sh.tube(-0.15, y, -0.28 - (y - 0.18) * 0.1, 0.15, y, -0.28 - (y - 0.18) * 0.1, 0.004, 0.004, 3);
+      sh.tube(-0.15, 0.28, 0.34, 0.15, 0.28, 0.34, 0.009, 0.009, 5);
+      k.m('#d9473f', 'plastic');
+      sh.tube(-0.155, 0.99, -0.345, 0.155, 0.99, -0.345, 0.02, 0.02, 8);
+      k.m('#1d1f22', 'rubber');
+      for (const sd of [-0.15, 0.15])
+        for (const z of [0.14, -0.2]) {
+          sh.push().local(sd, 0.07, z, 0, 0, Math.PI / 2);
+          sh.cyl(0, -0.016, 0, 0.07, 0.07, 0.032, 12, 3);
+          sh.pop();
+        }
+      sh.pop();
+    }
+    return;
+  }
   for (let i = 0; i < n; i++) {
     const x = -1.0 + i * 0.38;
     k.m('#9aa3a8', 'steel');
@@ -1476,8 +1516,39 @@ export function nets(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const c = rng.pick(['#2f5a46', '#3a4f6a', '#6a4a3a', '#2a3a3a']);
   k.m(c, 'rubber');
-  sh.ellipsoid(0, 0.25, 0, 1.0, 0.32, 0.7, 1);
-  sh.ellipsoid(0.45, 0.35, 0.1, 0.55, 0.3, 0.45, 1);
+  if (shapeOn('shapepots')) {
+    softBlob(sh, 0, 0.2, 0, 1.0, 0.3, 0.7, 0.75, 0.75, 0.22, rng.next() * 9, 7, 14);
+    softBlob(sh, 0.45, 0.32, 0.1, 0.55, 0.28, 0.45, 0.75, 0.75, 0.25, rng.next() * 9, 6, 12);
+    // the fall of the mesh: darker folds down the heap
+    k.s.r *= 0.68;
+    k.s.g *= 0.68;
+    k.s.b *= 0.68;
+    for (let i = 0; i < 9; i++) {
+      const a = rng.range(0, TAU);
+      const x0 = Math.cos(a) * 0.3,
+        z0 = Math.sin(a) * 0.2;
+      sh.tube(x0, 0.46, z0, Math.cos(a) * 0.98, 0.02, Math.sin(a) * 0.68, 0.02, 0.012, 3);
+    }
+    const line = rng.pick(['#e8d8a0', '#d8d4c8']);
+    k.m(line, 'rubber');
+    let px = 0.9,
+      pz = 0,
+      py = 0.08;
+    for (let i = 1; i <= 12; i++) {
+      const a = (i / 12) * 8.5,
+        rr = 0.92 - i * 0.05;
+      const qx = Math.cos(a) * rr,
+        qz = Math.sin(a) * rr * 0.65,
+        qy = 0.1 + i * 0.033;
+      sh.tube(px, py, pz, qx, qy, qz, 0.012, 0.012, 4);
+      px = qx;
+      py = qy;
+      pz = qz;
+    }
+  } else {
+    sh.ellipsoid(0, 0.25, 0, 1.0, 0.32, 0.7, 1);
+    sh.ellipsoid(0.45, 0.35, 0.1, 0.55, 0.3, 0.45, 1);
+  }
   k.m(rng.pick(['#e8762c', '#f2c84b', '#c9302c']), 'plastic');
   for (let i = 0; i < 9; i++) {
     const a = rng.range(0, TAU),
@@ -1487,13 +1558,65 @@ export function nets(k: Kit, rng: Rng): void {
 }
 
 /** Lobster / crab pots. */
-export function pots(k: Kit, rng: Rng): void {
+export function pots(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
+  const shaped = shapeOn('shapepots');
   for (let i = 0; i < rng.int(2, 5); i++) {
     const x = -0.55 + (i % 3) * 0.55,
       y = i < 3 ? 0 : 0.42,
       z = i < 3 ? 0 : 0.0;
-    sh.push().local(x, y, z, 0, rng.range(-0.15, 0.15));
+    const turn = rng.range(-0.15, 0.15);
+    if (shaped) {
+      // an open pot: a weighted base, bent hoops, a rope line along the ridge; netting near (?noshapepots); no solid block of colour in it
+      const net = rng.pick(['#e8762c', '#2f6fb0', '#5c8a62']);
+      sh.push().local(x, y, z, 0, turn);
+      k.m(rng.pick(['#3a3f44', '#2f5a46', '#6a5a3a']), 'iron');
+      sh.box(0, 0.02, 0, 0.5, 0.04, 0.7, 1);
+      const arc = (a: number) => [Math.cos(a) * 0.24, 0.04 + Math.sin(a) * 0.3] as const;
+      for (const hz of [-0.3, 0, 0.3]) {
+        for (let s = 0; s < 8; s++) {
+          const [x0, y0] = arc((s / 8) * Math.PI),
+            [x1, y1] = arc(((s + 1) / 8) * Math.PI);
+          sh.tube(x0, y0, hz, x1, y1, hz, 0.009, 0.009, 4);
+        }
+      }
+      k.m(net, 'rubber');
+      for (let s = 1; s < 8; s++) {
+        const [hx, hy] = arc((s / 8) * Math.PI);
+        sh.tube(hx, hy, -0.34, hx, hy, 0.34, 0.005, 0.005, 3);
+      }
+      if (kd) {
+        const nk = kd.sh;
+        nk.push().local(x, y, z, 0, turn);
+        kd.m(net, 'rubber');
+        for (let q = 0; q < 5; q++) {
+          const z0 = -0.3 + q * 0.12,
+            z1 = z0 + 0.12;
+          for (let s = 0; s < 8; s++) {
+            const [ax, ay] = arc((s / 8) * Math.PI),
+              [bx, by] = arc(((s + 1) / 8) * Math.PI);
+            nk.tube(ax, ay, z0, bx, by, z1, 0.0028, 0.0028, 3);
+            nk.tube(ax, ay, z1, bx, by, z0, 0.0028, 0.0028, 3);
+          }
+        }
+        // the entrance eye in one end, a buoy on its line
+        kd.m('#d8d4c8', 'plastic');
+        for (let s = 0; s < 10; s++) {
+          const a0 = (s / 10) * TAU,
+            a1 = ((s + 1) / 10) * TAU;
+          nk.tube(Math.cos(a0) * 0.08, 0.18 + Math.sin(a0) * 0.08, 0.3, Math.cos(a1) * 0.08, 0.18 + Math.sin(a1) * 0.08, 0.3, 0.006, 0.006, 3);
+        }
+        kd.m(net, 'rubber');
+        for (let s = 0; s < 10; s++) {
+          const a0 = (s / 10) * TAU;
+          nk.tube(Math.cos(a0) * 0.08, 0.18 + Math.sin(a0) * 0.08, 0.3, Math.cos(a0) * 0.19, 0.16 + Math.sin(a0) * 0.2, 0.3, 0.0028, 0.0028, 3);
+        }
+        nk.pop();
+      }
+      sh.pop();
+      continue;
+    }
+    sh.push().local(x, y, z, 0, turn);
     k.m(rng.pick(['#3a3f44', '#2f5a46', '#6a5a3a']), 'iron');
     sh.box(0, 0.02, 0, 0.5, 0.04, 0.7, 1);
     for (let a = 0; a < 5; a++) {
@@ -1986,14 +2109,50 @@ export function pipes(k: Kit, rng: Rng): void {
   for (const x of [-1.0, 1.0]) sh.box(x, 0.06, 0, 0.12, 0.12, 1.25, 1);
   const col = rng.pick(['#6f7478', '#8a4a2e', '#3a5f7d', '#c9c3b7', '#e8a33c']);
   const r = rng.range(0.13, 0.2);
+  const shaped = shapeOn('shapepipes');
   let row = 0;
   for (let n = 5; n > 0 && row < 4; n--, row++) {
     for (let i = 0; i < n; i++) {
       const z = (i - (n - 1) / 2) * r * 2.05;
+      const py = 0.12 + r + row * r * 1.75;
       k.m(col, 'steel');
-      sh.push().local(0, 0.12 + r + row * r * 1.75, z, 0, 0, Math.PI / 2).cyl(0, -1.45, 0, r, r, 2.9, 7, 0).pop();
+      sh.push().local(0, py, z, 0, 0, Math.PI / 2).cyl(0, -1.45, 0, r, r, 2.9, shaped ? 16 : 7, 0).pop();
+      if (shaped) {
+        // a flange at each end with the bore in shade, not a painted disc
+        for (const e of [-1, 1]) {
+          k.m(col, 'steel');
+          k.s.r *= 0.85;
+          k.s.g *= 0.85;
+          k.s.b *= 0.85;
+          sh.push().local(e * 1.42, py, z, 0, 0, Math.PI / 2).cyl(0, -0.035, 0, r * 1.12, r * 1.12, 0.07, 16, 0).pop();
+          sh.push().local(e * 1.457, py, z, 0, 0, (e * Math.PI) / 2).disc(0, 0, 0, r * 1.12, 16, 1).pop();
+          k.m('#111213', 'steel');
+          sh.push().local(e * 1.4575, py, z, 0, 0, (e * Math.PI) / 2).disc(0, 0, 0, r * 0.84, 16, 1).pop();
+        }
+        continue;
+      }
       k.m('#1d1f22', 'steel');
-      sh.push().local(1.451, 0.12 + r + row * r * 1.75, z, 0, 0, Math.PI / 2).disc(0, 0, 0, r * 0.82, 7, 1).pop();
+      sh.push().local(1.451, py, z, 0, 0, Math.PI / 2).disc(0, 0, 0, r * 0.82, 7, 1).pop();
+    }
+  }
+  if (shaped) {
+    // wedges so the bottom row can't roll, and a strap over the load
+    k.m('#8a6a48', 'wood');
+    for (const x of [-1.0, 1.0])
+      for (const f of [-1, 1]) {
+        const z = f * (2.5 * r * 2.05 + 0.02);
+        sh.box(x, 0.16, z, 0.11, 0.08, 0.12, 1);
+      }
+    k.m('#d9702a', 'rubber');
+    const rows = 4;
+    const topY = 0.12 + 2 * r + (rows - 1) * r * 1.75;
+    const halfW = 2.5 * r * 2.05;
+    for (const x of [-0.7, 0.7]) {
+      sh.beam(x, 0.13, -halfW - 0.03, x, topY * 0.55, -halfW * 0.7, 0.05, 0.004);
+      sh.beam(x, topY * 0.55, -halfW * 0.7, x, topY + 0.004, -r * 0.6, 0.05, 0.004);
+      sh.beam(x, topY + 0.004, -r * 0.6, x, topY + 0.004, r * 0.6, 0.05, 0.004);
+      sh.beam(x, topY + 0.004, r * 0.6, x, topY * 0.55, halfW * 0.7, 0.05, 0.004);
+      sh.beam(x, topY * 0.55, halfW * 0.7, x, 0.13, halfW + 0.03, 0.05, 0.004);
     }
   }
 }
@@ -2087,7 +2246,7 @@ export function timber(k: Kit, rng: Rng, kd?: Kit): void {
 // ───────────────────────────────────────────────────────── freight yard ──
 
 /** Stack of railway sleepers. */
-export function sleepers(k: Kit, rng: Rng): void {
+export function sleepers(k: Kit, rng: Rng, kd?: Kit): void {
   const sh = k.sh;
   const layers = rng.int(3, 7);
   for (let l = 0; l < layers; l++) {
@@ -2096,6 +2255,34 @@ export function sleepers(k: Kit, rng: Rng): void {
       k.m(rng.pick(['#4a3a2e', '#3f3228', '#55463a']), 'wood');
       if (along) sh.box(0, 0.08 + l * 0.16, -0.54 + i * 0.36, 2.6, 0.15, 0.25, 1);
       else sh.box(-0.95 + i * 0.63, 0.08 + l * 0.16, 0, 0.25, 0.15, 1.4, 1);
+      if (!kd) continue;
+      // near (?noshapepipes): what a used sleeper has: checks along the grain, an end split, tar runs, bolt holes where the chairs sat
+      const s = kd.sh;
+      const y = 0.08 + l * 0.16;
+      s.push().local(along ? 0 : -0.95 + i * 0.63, y, along ? -0.54 + i * 0.36 : 0, 0, along ? 0 : Math.PI / 2);
+      const L = along ? 2.6 : 1.4;
+      kd.m('#16120e', 'wood');
+      for (const f of [-1, 1]) {
+        for (let c = 0; c < 3; c++) {
+          const a = rng.range(-L / 2 + 0.05, L / 2 - 0.5),
+            cl = rng.range(0.15, 0.5);
+          s.box(a + cl / 2, rng.range(-0.05, 0.05), f * 0.1255, cl, rng.range(0.004, 0.009), 0.001, 0);
+        }
+      }
+      for (const e of [-1, 1]) {
+        s.box(e * (L / 2 + 0.0006), rng.range(-0.03, 0.03), 0, 0.001, 0.006, rng.range(0.08, 0.2), 0);
+        s.box(e * (L / 2 + 0.0006), 0, rng.range(-0.06, 0.06), 0.001, rng.range(0.06, 0.13), 0.005, 0);
+      }
+      if (l === layers - 1) {
+        for (const c of [-0.5, 0.5])
+          for (const q of [-0.07, 0.07]) s.cyl((c * L) / 1.6, 0.0755, q, 0.012, 0.012, 0.001, 6, 2);
+        kd.m('#6a4f3a', 'wood');
+        for (const c of [-0.5, 0.5]) s.box((c * L) / 1.6, 0.0752, 0, 0.32, 0.0008, 0.18, 0);
+        kd.m('#16120e', 'wood');
+        for (const c of [-0.5, 0.5])
+          for (const q of [-0.07, 0.07]) s.cyl((c * L) / 1.6, 0.0762, q, 0.012, 0.012, 0.001, 6, 2);
+      }
+      s.pop();
     }
   }
 }

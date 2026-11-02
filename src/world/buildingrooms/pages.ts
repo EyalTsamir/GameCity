@@ -404,7 +404,14 @@ const W: Record<string, (k: Kit, r: R) => void> = {
     k.box(0, 0, 0, MOD_W, 0.75, 0.42, shade(WOOD.oak, 0.8), 0.006);
     for (let i = 0; i < 22; i++) {
       const x = 0.02 + i * 0.054;
-      k.box(x, 0.75, 0.18, x + 0.05, 0.75 + 0.27 + r() * 0.02, 0.4, G.pick(r, G.PAL.packs), 0.002);
+      const sleeve = G.pick(r, G.PAL.packs);
+      k.box(x, 0.75, 0.18, x + 0.05, 0.75 + 0.27 + r() * 0.02, 0.4, sleeve, 0.002);
+      if (shapedWindows) {
+        // the top edge of the sleeve, its pale inner paper showing, an index card standing up now and then
+        k.rect(x + 0.006, 0.99, x + 0.044, 1.0, 0.401, G.pick(r, G.PAL.pale));
+        k.rect(x + 0.008, 0.8 + r() * 0.1, x + 0.042, 0.84 + r() * 0.1, 0.401, shade(sleeve, 0.6));
+        if (i % 7 === 3) k.rect(x, 1.0, x + 0.05, 1.07, 0.402, hex(0xe8e2c8));
+      }
     }
     bay(k, r, { wood: WOOD.oak, y0: 1.2, y1: 1.21, rows: 1, depth: 0.05, base: false }, () => undefined);
   },

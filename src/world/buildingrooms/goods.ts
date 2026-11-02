@@ -44,6 +44,33 @@ export function packs(k: Kit, r: R, x0: number, x1: number, y: number, h: number
     const c = r() < 0.55 ? brand : pick(r, pal);
     const z = zf - r() * 0.05;
     k.box(x + 0.004, y, z - 0.1, x + w - 0.004, y + hh, z, shade(c, 0.86 + r() * 0.2), 0.004);
+    if (shapeOn('shaperooms')) {
+      // the design of a box: a picture panel, a band and a title, a big roundel, or a title across the top and small print
+      const kind = r();
+      const ink = mixc(c, hex(0x101012), 0.75),
+        pale = pick(r, PAL.pale),
+        accent = pick(r, pal);
+      const a = x + w * 0.1,
+        b = x + w * 0.9;
+      if (kind < 0.3) {
+        k.rect(a, y + hh * 0.34, b, y + hh * 0.84, z + 0.001, pale);
+        k.disc(x + w * (0.35 + r() * 0.3), y + hh * 0.58, z + 0.002, Math.min(w, hh) * 0.2, accent, 0, 7);
+        k.rect(x + w * 0.2, y + hh * 0.12, x + w * 0.8, y + hh * 0.22, z + 0.001, shade(pale, 0.9));
+      } else if (kind < 0.55) {
+        k.rect(x + 0.006, y + hh * 0.52, x + w - 0.006, y + hh * 0.74, z + 0.001, accent);
+        k.rect(x + w * 0.2, y + hh * 0.6, x + w * 0.8, y + hh * 0.66, z + 0.002, pale);
+        k.rect(x + w * 0.2, y + hh * 0.2, x + w * 0.65, y + hh * 0.26, z + 0.001, ink);
+      } else if (kind < 0.8) {
+        k.disc(x + w / 2, y + hh * 0.56, z + 0.001, Math.min(w, hh) * 0.36, pale, 0, 7);
+        k.disc(x + w / 2, y + hh * 0.56, z + 0.002, Math.min(w, hh) * 0.22, accent, 0, 7);
+        k.rect(x + w * 0.25, y + hh * 0.1, x + w * 0.75, y + hh * 0.15, z + 0.001, pale);
+      } else {
+        k.rect(x + 0.006, y + hh * 0.78, x + w - 0.006, y + hh * 0.96, z + 0.001, pale);
+        k.rect(x + w * 0.16, y + hh * 0.84, x + w * 0.84, y + hh * 0.9, z + 0.002, ink);
+        for (let i = 0; i < 3; i++) k.rect(a, y + hh * (0.12 + i * 0.09), a + (b - a) * (0.9 - i * 0.2), y + hh * (0.15 + i * 0.09), z + 0.001, pale);
+      }
+      return;
+    }
     if (r() < 0.75) {
       const ly = y + hh * (0.28 + r() * 0.2);
       k.rect(x + w * 0.12, ly, x + w * 0.88, ly + hh * 0.26, z + 0.001, pick(r, PAL.pale));

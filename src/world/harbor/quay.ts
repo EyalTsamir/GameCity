@@ -162,7 +162,39 @@ function fishBoxStack(b: HB, x: number, y: number, z: number, n: number, yaw: nu
     b.pat(PAT.NONE);
     b.pop();
   }
-  if (fish) {
+  if (fish && shapeOn('shapefishbox')) {
+    const yt = (n - 1) * 0.255 + 0.2;
+    b.color('#dbe6ea');
+    b.box(0, yt, 0, 0.66, 0.04, 0.38, 0, 0);
+    for (let k = 0; k < 34; k++) {
+      b.color(k % 3 === 0 ? '#f4f9fb' : k % 3 === 1 ? '#e6eff2' : '#cfdde3');
+      b.box((rng.next() - 0.5) * 0.62, yt + 0.022 + rng.next() * 0.008, (rng.next() - 0.5) * 0.34, 0.016 + rng.next() * 0.03, 0.012, 0.016 + rng.next() * 0.03, rng.next() * 3.14, 1);
+    }
+    const prof: [number, number][] = [[-0.5, 0.02], [-0.38, 0.55], [-0.2, 0.95], [0, 1], [0.2, 0.78], [0.36, 0.4], [0.46, 0.1]];
+    for (let k = 0; k < 6; k++) {
+      const fx = -0.22 + (k % 3) * 0.22 + (rng.next() - 0.5) * 0.04,
+        fz = -0.09 + Math.floor(k / 3) * 0.17 + (rng.next() - 0.5) * 0.03;
+      const len = 0.3 + rng.next() * 0.06,
+        rad = 0.032 + rng.next() * 0.006;
+      b.pushT(fx, yt + 0.052, fz, Math.PI / 2 + (rng.next() - 0.5) * 0.4, 0, (rng.next() - 0.5) * 0.3);
+      const back = k % 2 ? '#4f6470' : '#5d6f62';
+      const P = (s: number, i: number): V3 => {
+        const a = (i / 6) * Math.PI * 2;
+        return [Math.cos(a) * prof[s][1] * rad * 0.62, Math.sin(a) * prof[s][1] * rad, prof[s][0] * len];
+      };
+      for (let s = 0; s < prof.length - 1; s++)
+        for (let i = 0; i < 6; i++) {
+          b.color(i === 1 || i === 0 && s % 2 ? back : i === 2 ? '#8e9ea4' : '#d3dbdd');
+          b.quad(P(s, i), P(s, i + 1), P(s + 1, i + 1), P(s + 1, i));
+        }
+      b.color(back);
+      b.quad2([0, 0, 0.45 * len], [0, 0.03, 0.56 * len], [0, 0, 0.53 * len], [0, -0.03, 0.56 * len]);
+      b.quad2([0, rad, -0.1 * len], [0, rad + 0.016, 0], [0, rad + 0.012, 0.1 * len], [0, rad, 0.16 * len]);
+      b.color('#0e1214');
+      for (const sd of [-1, 1]) b.sphere(sd * rad * 0.42, rad * 0.25, -0.36 * len, 0.0055, 5, 3, 1);
+      b.pop();
+    }
+  } else if (fish) {
     const yt = (n - 1) * 0.255 + 0.2;
     b.color('#e4ecef');
     b.box(0, yt, 0, 0.66, 0.04, 0.38, 0, 0);
@@ -481,6 +513,49 @@ function store(b: HB, x0: number, z0: number, x1: number, z1: number, y: number)
   const pegZ = z1 - 0.45;
   b.color('#3b3330');
   b.box(x1 + 0.05, y + 1.75, pegZ, 0.06, 0.06, 0.7, 0, 0);
+  if (shapeOn('shapereefer')) {
+    // a jacket hung by its hood: shoulders, sleeves, a zip, pockets; bib-and-brace by its straps, the legs hanging; boots with feet
+    const X = x1 + 0.13,
+      Y = y + 0.98,
+      Z = pegZ - 0.2;
+    const P = (dy: number, dz: number, dx = 0): V3 => [X + dx, Y + dy, Z + dz];
+    b.color('#e8c21c');
+    b.quad2(P(0, -0.24), P(0, 0.24), P(0.62, 0.2), P(0.62, -0.2));
+    b.quad2(P(0.62, -0.2), P(0.62, 0.2), P(0.72, 0.07), P(0.72, -0.07));
+    for (const sd of [-1, 1]) {
+      b.quad2(P(0, sd * 0.24, 0), P(0, sd * 0.24, -0.07), P(0.62, sd * 0.2, -0.07), P(0.62, sd * 0.2, 0));
+      b.tube([P(0.62, sd * 0.21, -0.02), P(0.4, sd * 0.275, 0.0), P(0.04, sd * 0.285, 0.015)], 0.052, 7);
+    }
+    b.sphere(X - 0.02, Y + 0.77, Z, 0.095, 8, 5, 1);
+    b.color('#b8990f');
+    b.quad2(P(0.02, -0.005, 0.002), P(0.02, 0.005, 0.002), P(0.71, 0.005, 0.002), P(0.71, -0.005, 0.002));
+    for (const sd of [-1, 1]) {
+      b.quad2(P(0.16, sd * 0.06, 0.002), P(0.16, sd * 0.19, 0.002), P(0.28, sd * 0.19, 0.002), P(0.28, sd * 0.06, 0.002));
+      b.quad2(P(0.03, sd * 0.235, 0.0015), P(0.03, sd * 0.01, 0.0015), P(0.5, sd * 0.01, 0.0015), P(0.5, sd * 0.2, 0.0015));
+    }
+    const Z2 = pegZ + 0.21,
+      X2 = x1 + 0.11,
+      Y2 = y + 0.72;
+    const Q = (dy: number, dz: number): V3 => [X2, Y2 + dy, Z2 + dz];
+    b.color('#e3622a');
+    b.quad2(Q(0.42, -0.16), Q(0.42, 0.16), Q(0.72, 0.13), Q(0.72, -0.13));
+    for (const sd of [-1, 1]) {
+      b.tube([[X2 - 0.01, Y2 + 0.46, Z2 + sd * 0.08], [X2 - 0.015, Y2 + 0.04, Z2 + sd * 0.09], [X2 - 0.01, Y2 - 0.38, Z2 + sd * 0.1]], 0.075, 7);
+      b.color('#b84c1e');
+      b.tube([[X2, Y2 + 0.72, Z2 + sd * 0.1], [X2 - 0.02, Y2 + 1.0, Z2 + sd * 0.03]], 0.018, 4);
+      b.color('#e3622a');
+    }
+    b.color('#b84c1e');
+    b.quad2(Q(0.52, -0.09), Q(0.52, 0.09), Q(0.64, 0.09), Q(0.64, -0.09));
+    b.color('#1d3b2a');
+    for (const oz of [-0.12, 0.05]) {
+      b.vcyl(x1 + 0.12, y + 0.07, pegZ + oz, 0.058, 0.36, 10, 2, 0.066);
+      b.sphere(x1 + 0.2, y + 0.058, pegZ + oz, 0.058, 8, 5, 0.8);
+      b.color('#0f1d15');
+      b.box(x1 + 0.17, y + 0.012, pegZ + oz, 0.27, 0.024, 0.115, 0, 0);
+      b.color('#1d3b2a');
+    }
+  } else {
   b.color('#e8c21c');
   b.box(x1 + 0.12, y + 1.35, pegZ - 0.17, 0.1, 0.75, 0.42, 0, 0);
   b.color('#e3622a');
@@ -489,6 +564,7 @@ function store(b: HB, x0: number, z0: number, x1: number, z1: number, y: number)
   for (const oz of [-0.12, 0.05]) {
     b.box(x1 + 0.12, y + 0.2, pegZ + oz, 0.12, 0.4, 0.11, 0, 0);
     b.box(x1 + 0.2, y + 0.03, pegZ + oz, 0.27, 0.06, 0.11, 0, 0);
+  }
   }
   // bench + fish box seat in front
   b.color('#8a6a48').pat(PAT.PLANKS_Z, 0.12);

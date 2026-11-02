@@ -465,7 +465,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'pots':
           at(kf);
-          SK.pots(kf, srng);
+          SK.pots(kf, srng, shapeOn('shapepots') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'rope':
           at(kf);
@@ -493,7 +493,7 @@ export default function create(ctx: CityContext): CityModule {
           break;
         case 'sleepers':
           at(k);
-          SK.sleepers(k, srng);
+          SK.sleepers(k, srng, shapeOn('shapepipes') ? yardNear(it.x, y, it.z, it.yaw) : undefined);
           break;
         case 'heap':
           at(k);
