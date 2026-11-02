@@ -6,6 +6,7 @@
 // Joint patterns are box-filtered analytically with fwidth so they fade out cleanly with distance.
 
 import * as THREE from 'three';
+import { wearOn } from '../../core/sweepwear';
 import { streetDetail } from '../../core/streetdetail';
 import { closeMat } from '../../core/closemat';
 import type { CityContext } from '../../core/context';
@@ -230,7 +231,7 @@ function inject(mat: THREE.MeshStandardMaterial, opts: { attrs: string; varyings
       .replace('#include <common>', `#include <common>\n${opts.attrs}\n${opts.varyings}\nvarying vec3 vWP;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${opts.assign}\nvWP = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     // the flat litter painted into the ground: real scraps and leaves lie there instead (closemat/litter.ts) on the tiers that have them
-    let fs = '#define TH_NO_WET\n' + (litterPainted ? '#define RD_LITTER\n' : '') + shader.fragmentShader.replace('#include <common>', `#include <common>\n${opts.varyings}\n${LAMP_GLSL}\n${COMMON}\n${opts.pars}`);
+    let fs = '#define TH_NO_WET\n' + (litterPainted ? '#define RD_LITTER\n' : '') + (wearOn('wearpave') ? '#define RD_WEARPAVE\n' : '') + shader.fragmentShader.replace('#include <common>', `#include <common>\n${opts.varyings}\n${LAMP_GLSL}\n${COMMON}\n${opts.pars}`);
     // night street-light map (black until the lamps module bakes it): light multiplies the albedo.
     // world normal from the view-space shading normal (rotation only: inverse = transpose)
     fs = fs.replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\nreflectedLight.indirectDiffuse += diffuseColor.rgb * thLampLight(vWP, inverseTransformDirection(normal, viewMatrix));');

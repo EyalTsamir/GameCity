@@ -12,6 +12,7 @@ import type { Kit } from './furniture';
 import type { Printer } from './print';
 import { markProp } from '../lettering/spots';
 import { boltZ, cbox, lathe } from './shapes';
+import { wearOn } from '../../core/sweepwear';
 
 type Draw = (g: CanvasRenderingContext2D, w: number, h: number) => void;
 const SANS = 'Arial, Helvetica, sans-serif';
@@ -23,16 +24,70 @@ const HEAD = '"Arial Black", "Segoe UI Black", Impact, "Helvetica Neue", Arial, 
 function tagDraw(bg: string, seed: number): Draw {
   return (g, w, h) => {
     const r = (k: number) => hash01(seed, k, 3);
-    g.fillStyle = bg;
-    g.fillRect(0, 0, w, h);
+    // (cut out: a painted rectangle of the door's colour never matched the door. The printer's alpha test drops the faint overspray,
+    // which stays to give the stroke's edge texels the ink's colour instead of black)
+    if (wearOn('weartag')) g.clearRect(0, 0, w, h);
+    else {
+      g.fillStyle = bg;
+      g.fillRect(0, 0, w, h);
+    }
     const ink = ['#16161a', '#c2283c', '#2442a8', '#e9e6dc', '#e0a020'][Math.floor(r(1) * 5)];
     g.strokeStyle = ink;
     g.lineCap = 'round';
     g.lineJoin = 'round';
+    let y = 0;
+    if (wearOn('weartag')) {
+      // a can held by a hand: letters, the stroke fat where it slows and thin where it flicks, overspray round it, the first coat
+      // faded under the second, runs that end in a bead
+      const letters = 3 + Math.floor(r(4) * 3);
+      const cw = (w * 0.84) / letters;
+      const path = (pass: number) => {
+        for (let l = 0; l < letters; l++) {
+          const x0 = w * 0.08 + cw * l + cw * 0.1 * (r(90 + l) - 0.5);
+          const pts = 4 + Math.floor(r(100 + l) * 3);
+          let px = x0,
+            py = h * (0.72 - 0.1 * r(110 + l));
+          for (let i = 0; i < pts; i++) {
+            const nx = x0 + cw * 0.9 * r(120 + l * 7 + i),
+              ny = h * (0.14 + 0.72 * r(160 + l * 7 + i));
+            const fast = i % 2 === 0;
+            g.lineWidth = h * (fast ? 0.035 : 0.085) * (pass === 0 ? 2.2 : 1) * (0.8 + 0.4 * r(200 + l * 7 + i));
+            g.beginPath();
+            g.moveTo(px, py);
+            g.quadraticCurveTo((px + nx) / 2 + cw * 0.3 * (r(240 + l * 7 + i) - 0.5), (py + ny) / 2, nx, ny);
+            g.stroke();
+            px = nx;
+            py = ny;
+          }
+        }
+      };
+      g.globalAlpha = 0.16;
+      g.filter = `blur(${Math.max(1, h * 0.03)}px)`;
+      path(0);
+      g.filter = 'none';
+      g.globalAlpha = 0.9;
+      path(1);
+      g.globalAlpha = 1;
+      g.lineWidth = h * 0.016;
+      for (let i = 0; i < 3; i++) {
+        const dx = w * (0.14 + 0.72 * r(70 + i));
+        const y0 = h * (0.45 + 0.25 * r(72 + i)),
+          y1 = Math.min(h * 0.96, y0 + h * (0.08 + 0.3 * r(74 + i)));
+        g.beginPath();
+        g.moveTo(dx, y0);
+        g.lineTo(dx, y1);
+        g.stroke();
+        g.fillStyle = ink;
+        g.beginPath();
+        g.arc(dx, y1, h * 0.014, 0, Math.PI * 2);
+        g.fill();
+      }
+      return;
+    }
     g.lineWidth = h * (0.07 + 0.05 * r(2));
     g.beginPath();
-    let x = w * 0.08,
-      y = h * (0.35 + 0.3 * r(3));
+    let x = w * 0.08;
+    y = h * (0.35 + 0.3 * r(3));
     g.moveTo(x, y);
     const n = 6 + Math.floor(r(4) * 5);
     for (let i = 0; i < n; i++) {

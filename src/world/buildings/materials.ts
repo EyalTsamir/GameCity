@@ -33,6 +33,7 @@ import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { GLASS_MIRROR_GLSL, glassMirror } from '../water/glassMirror';
 import { LEGACY_SHELL_FRAG_PARS, LEGACY_SHELL_FRAG_MAIN } from './legacyShell';
 import { perfOn } from '../../core/perfdeep';
+import { wearOn } from '../../core/sweepwear';
 
 // perf-deep: exact early-outs in the facade shader (each skipped term has weight exactly 0 there; the gated
 // blocks fetch with textureGrad, derivatives taken before the branch, so FXC keeps a real branch). `?nofacadegates`
@@ -1732,9 +1733,12 @@ ${fg(`      float ew = max(0.09, fq.x * 1.25);
           float len = 0.3 + 0.9 * fract(hc * 9.7);
           float wob = (texture2D(uBhNoise, vec2(along * 0.9, seed * 0.07 + cell.x * 0.31)).g - 0.5) * 0.09;
           float off = cq.x * side - along * (0.45 + 0.4 * fract(hc * 5.1)) - wob;
-          float cw = max(0.0016, fq.x * 0.7);
+          ${wearOn('wearcrack') ? `// it tapers from the corner to nothing
+          float tw = 0.0022 * max(1.0 - along / len, 0.0);
+          float cw = max(tw, fq.x * 0.7);` : `float tw = 0.0016;
+          float cw = max(0.0016, fq.x * 0.7);`}
           float crack = (1.0 - smoothstep(cw * 0.5, cw * 1.5, abs(off))) * step(0.0, along) * (1.0 - smoothstep(len * 0.7, len, along));
-          albedo *= 1.0 - crack * 0.72 * (0.0016 / cw);
+          albedo *= 1.0 - crack * 0.72 * (tw / cw);
         }
         float sc = fract(seed * 0.3917);
         if (sc > 0.35) {

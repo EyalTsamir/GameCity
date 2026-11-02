@@ -589,12 +589,27 @@ vec3 rdHard(inout float rough) {
     float hc = rdHash(cell + 17.3);
     if (vV.z > -1.5 && det > 0.01 && minS > 0.18) {
       float crk = 0.0;
+#ifdef RD_WEARPAVE
+      // a slab breaks once, from joint to joint, and never along a ruler: the close-up layer works on this same line (closemat, CM_SLAB)
+      if (rdHash(cell + 23.9) < 0.08) {
+        vec2 dn = normalize(vec2(rdHash(cell + 2.2) - 0.5, rdHash(cell + 4.4) - 0.5) + 1e-3);
+        // (the offset is a zig-zag along the crack: straight breaks and sudden turns, and as a function of one coordinate it can't close into rings)
+        vec2 lo2 = (sl - 0.5) * size;
+        float zt = dot(lo2, vec2(-dn.y, dn.x));
+        float z0 = floor(zt / 0.31), z1 = floor(zt / 0.07);
+        float zig = (mix(rdHash(vec2(z0, cell.x)), rdHash(vec2(z0 + 1.0, cell.x)), fract(zt / 0.31)) - 0.5) * 0.13 + (mix(rdHash(vec2(z1, cell.y)), rdHash(vec2(z1 + 1.0, cell.y)), fract(zt / 0.07)) - 0.5) * 0.035;
+        float dd = abs(dot(lo2, dn) + (rdHash(cell + 6.6) - 0.5) * minS * 0.4 + zig);
+        crk = rdLine(dd, 0.0035, fwm) * det;
+      }
+      c *= 1.0 - 0.62 * crk;
+#else
       if (hc < 0.05) {
         vec2 dn = normalize(vec2(rdHash(cell + 2.2) - 0.5, rdHash(cell + 4.4) - 0.5) + 1e-3);
         float dd = abs(dot((sl - 0.5) * size, dn) + (rdHash(cell + 6.6) - 0.5) * minS * 0.4);
         crk = rdLine(dd, 0.008, fwm) * det;
       }
       c *= 1.0 - 0.55 * crk;
+#endif
       c *= hc > 0.05 && hc < 0.09 ? 1.0 + 0.1 * det : 1.0;                 // replaced, fresher slab
       float sunk = hc > 0.09 && hc < 0.12 ? 1.0 : 0.0;                        // sunken: darker, dirty joints
       c *= 1.0 - sunk * det * (0.08 + 0.22 * (1.0 - smoothstep(0.0, minS * 0.2, edge)));
@@ -623,11 +638,21 @@ vec3 rdHard(inout float rough) {
       if (hs < 0.16) {
         vec2 ctr = (sc + vec2(rdHash(sc + 1.9), rdHash(sc + 7.7))) * 1.7;
         float rr = 0.1 + 0.28 * rdHash(sc + 3.3);
+#ifdef RD_WEARPAVE
+        // soaked in: no outline, broken at three sizes, deeper where it found a joint; the tide line of a dried spill only here and there
+        float dd = length((p - ctr) * vec2(1.0, 0.8 + 0.4 * rdHash(sc + 5.1))) / rr + 0.8 * (nS.b - 0.5) + 0.5 * (nM.a - 0.5) + 0.4 * (textureLod(tRN, p * 3.1, 0.0).r - 0.5);
+        float fill = 1.0 - smoothstep(0.2, 1.05, dd);
+        fill *= 1.0 + 0.4 * (1.0 - smoothstep(0.0, 0.05, edge));
+        float ring = (1.0 - smoothstep(0.0, 0.1, abs(dd - 0.82))) * step(0.5, rdHash(sc + 8.8)) * smoothstep(0.45, 0.7, nS.g) * det;
+        vec3 sc3 = mix(vec3(0.82, 0.76, 0.66), vec3(0.7, 0.7, 0.72), step(0.6, rdHash(sc + 2.6)));
+        c = mix(c, c * sc3, clamp(fill * 0.62 + ring * 0.28, 0.0, 1.0));
+#else
         float dd = length((p - ctr) * vec2(1.0, 0.8 + 0.4 * rdHash(sc + 5.1))) / rr + 0.25 * (nS.b - 0.5);
         float fill = 1.0 - smoothstep(0.92, 1.0, dd);
         float ring = rdLine(abs(dd - 0.95) * rr, 0.012, fwm) * step(0.5, rdHash(sc + 8.8));
         vec3 sc3 = mix(vec3(0.82, 0.76, 0.66), vec3(0.7, 0.7, 0.72), step(0.6, rdHash(sc + 2.6)));
         c = mix(c, c * sc3, clamp(fill * 0.8 + ring * 0.7, 0.0, 1.0));
+#endif
       }
     }
 #ifdef RD_LITTER

@@ -6,6 +6,8 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { CityContext } from '../../core/context';
+import { wearOn, wearFix } from '../../core/sweepwear';
+import { PlaceStains } from './stains';
 import { RIVER, QUAY_X, SLAB, SIDEWALK_Y, WATER_LEVEL as WATER_LEVEL_M } from '../../core/constants';
 import { RIDGE_FOOT_Z } from '../../core/plan';
 import type { Rng } from '../../core/rng';
@@ -18,7 +20,7 @@ import { boxHunt } from '../../core/boxhunt';
 import { createRailings, setRiverRailDetail, type RailingResult } from './railings';
 import { buildCliffs, type CliffResult } from './cliffs';
 import type { GlowPoint } from './glow';
-import { buildPlacesStone, buildPlacesIron } from './places';
+import { buildPlacesStone, buildPlacesIron, setPlaceStains } from './places';
 
 export { KIND };
 export type { LadderSpot };
@@ -137,6 +139,10 @@ vec3 mN = vec3(0.0, 1.0, 0.0);
 // bump-perturbed world normal for rock (cliff skin, boulders) — replaces the flat facet normal for lighting
 vec3 mNb = vec3(0.0);
 float mTerr = -1.0;
+float mTerrK = 1.0;
+#ifdef TH_WEARROCK
+float mRiser = 0.0;
+#endif
 uniform float uNight;
 uniform vec3 uMoonDir;
 // Moonlit stone: the dark night key barely reaches the steep, mostly south-facing faces, so rock
@@ -162,6 +168,15 @@ vec3 masonryColor(vec3 base) {
   mN = n;
   // cliff face coordinates (u along the face, y up) + derivatives taken outside the kind branches
   vec2 cuv = vec2(dot(p.xz, vMas.zw), p.y);
+#ifdef TH_WEARROCK
+  // a facet turned edge on to the run of the cliff, or lying flat, has one of these coordinates all but standing still: the rock smears
+  // into black and pale stripes. It takes its own direction instead
+  if (kind > 5.5) {
+    float hl = length(n.xz);
+    if (abs(n.y) > 0.75) cuv = p.xz;
+    else if (abs(dot(n.xz, vMas.zw)) > 0.6 * hl) cuv.x = dot(p.xz, vec2(-n.z, n.x) / hl);
+  }
+#endif
   vec2 cdx = dFdx(cuv), cdy = dFdy(cuv);
   vec2 pdx = dFdx(p.xz), pdy = dFdy(p.xz);
   float fwY = fwidth(p.y);
@@ -183,10 +198,31 @@ vec3 masonryColor(vec3 base) {
     vec4 b3 = texture2D(tNoise, bq * 0.35 + 0.71);
     // chipped, not pitted: the fracture field is terraced (flat broken planes, steep risers = sharp edges), with
     // thin bedding laminae stepping along the strata on the cliff (cuv.y = height)
+#ifdef TH_WEARROCK
+    // rock breaks along its beds: the risers follow a dip through the whole outcrop, wander, and die out into the face, instead of
+    // being the contour lines of a noise (rings and worms that read as black squiggles)
+    float t1 = (b1.r * 0.8 + b2.b * 0.2) * 2.6 + (p.y * 1.25 + dot(p.xz, vec2(0.31, 0.17))) * (kind > 5.5 ? 0.0 : 1.0) + (kind > 5.5 ? (b1.r * 0.8 + b2.b * 0.2) * 2.4 : 0.0);
+    float ft = fract(t1);
+    // (and no riser narrower than a few pixels: the derivatives work on 2 × 2 blocks, and it would come out as a stipple. The footprint
+    // comes from the position, for the noise's finest wiggle: taken from t1 itself it changes from block to block, a stipple of its own)
+    mTerrK = smoothstep(0.34, 0.66, b3.g * 0.6 + b2.r * 0.4);
+    float dieOut = mTerrK * (1.0 - smoothstep(0.03, 0.09, length(fwidth(p)) * 6.0));
+    // (no step at the wrap: a jump in the height lands on the 2 × 2 pixel derivatives as a dotted line)
+    float rS = smoothstep(0.72, 1.0, ft);
+    float hterr = mix(t1, floor(t1) + rS + 0.12 * ft * (1.0 - rS), dieOut) * 0.2;
+    float rRiser = dieOut * smoothstep(0.78, 0.9, ft) * (1.0 - smoothstep(0.96, 1.0, ft));
+#else
     float t1 = (b1.r * 0.8 + b2.b * 0.2) * 5.0;
     float ft = fract(t1);
     float hterr = (floor(t1) + smoothstep(0.72, 1.0, ft) + 0.12 * ft) * 0.2;
+#endif
+#ifdef TH_WEARROCK
+    // (a sawtooth that climbs down instead of jumping: on a face seen edge on, the jump made black and pale stripes)
     float lam = kind > 5.5 ? fract(bq.y * 5.5 + b2.r * 1.6) : 0.0;
+    lam *= 1.0 - smoothstep(0.82, 1.0, lam);
+#else
+    float lam = kind > 5.5 ? fract(bq.y * 5.5 + b2.r * 1.6) : 0.0;
+#endif
     float fine = 1.0 - smoothstep(0.006, 0.016, fp);
     float hb = 0.16 * hterr + (0.018 * lam * lam + 0.02 * b2.g + 0.008 * b3.b) * fine;
     mTerr = floor(t1);
@@ -198,15 +234,26 @@ vec3 masonryColor(vec3 base) {
     vec3 r1 = cross(dpy, n), r2 = cross(n, dpx);
     float det = dot(dpx, r1);
     vec3 grad = sign(det) * (dFdx(hb) * r1 + dFdy(hb) * r2);
+#ifdef TH_WEARROCK
+    // a riser is a break a few centimetres high, not a wall facing away from the sun: it may turn the surface so far and no further
+    grad *= min(1.0, 0.8 * abs(det) / max(length(grad), 1e-12));
+#endif
     vec3 bn = abs(det) * n - grad * fade;
     if (dot(bn, bn) > 1e-20) n = normalize(bn);
     mNb = n;
     mN = n;
+#ifdef TH_WEARROCK
+    mRiser = rRiser * fade;
+#endif
   }
 #endif
   vec4 nz = texture2D(tNoise, (p.xz + p.y * 0.7) * 0.21);
   vec4 nf = texture2D(tNoise, (p.xz * 1.3 + vec2(p.y * 1.1, -p.y * 0.9)) * 0.9);
   vec3 col = base;
+#ifdef TH_WEARROCK
+  // the shadow in the break itself, narrow, under the lip
+  col *= 1.0 - 0.34 * mRiser;
+#endif
   if (kind < 0.5) {
     col *= 0.9 + 0.16 * nf.r;
     mRough = 0.86;
@@ -258,7 +305,7 @@ vec3 masonryColor(vec3 base) {
     col = mix(col, col * vec3(0.5, 0.53, 0.55), smoothstep(0.6, 0.78, st4.a) * side * 0.75);
     col *= 0.86 + 0.26 * nv.g;
     // each broken plane of the fracture terraces its own weathering: fresher (paler, warmer) or older (greyer)
-    if (mTerr >= 0.0) { float ht = th_hash12(vec2(mTerr, floor(cuv.x * 0.7 + mTerr * 0.37))); col *= mix(vec3(0.88, 0.9, 0.92), vec3(1.1, 1.06, 0.98), ht); }
+    if (mTerr >= 0.0) { float ht = th_hash12(vec2(mTerr, floor(cuv.x * 0.7 + mTerr * 0.37))); col *= mix(vec3(1.0), mix(vec3(0.88, 0.9, 0.92), vec3(1.1, 1.06, 0.98), ht), mTerrK); }
     col = mix(col, col * vec3(1.1, 1.04, 0.86) + vec3(0.035, 0.028, 0.0), smoothstep(0.6, 0.8, nu.a) * 0.55 * side);
     col = mix(col, vec3(0.5, 0.52, 0.44) * (0.85 + 0.3 * nv.b), smoothstep(0.64, 0.8, nv.a) * 0.22 * side);
     // hairline cracks across the strata + vertical joints that split the beds into blocks
@@ -314,6 +361,7 @@ function masonryMaterial(ctx: CityContext, flat: boolean): THREE.MeshStandardMat
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0, flatShading: flat });
   // (legacy look: no night lift either)
   mat.defines = flat ? { TH_FLATN: '', TH_NIGHT_K: NIGHT_K.toFixed(4) } : { TH_NIGHT_K: '0.0' };
+  if (wearOn('wearrock')) mat.defines.TH_WEARROCK = '';
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
@@ -1121,7 +1169,10 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   }
 
   // places between buildings (core/places.ts): lower quay, old-town lane, terrace, gatehouse
+  const placeStains = wearFix(ctx.quality.level, 'wearwall') ? new PlaceStains() : null;
+  setPlaceStains(placeStains);
   buildPlacesStone(b, ctx, model, lights);
+  setPlaceStains(null);
 
   // iron railings / ladders (their lamp globes are emissive masonry); the places' stair landings are railing gaps
   setRiverRailDetail(boxHunt(ctx, 'riverrail'));
@@ -1134,6 +1185,8 @@ export function createMasonry(ctx: CityContext, model: TerrainModel): MasonryRes
   mesh.receiveShadow = true;
   mesh.matrixAutoUpdate = false;
   mesh.updateMatrix();
+  const stainMesh = placeStains?.mesh();
+  if (stainMesh) mesh.add(stainMesh);
 
   // veils: black with per-vertex alpha
   const vg = veils.build(true);

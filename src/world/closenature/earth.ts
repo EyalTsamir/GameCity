@@ -56,7 +56,7 @@ void main() {
   ratio *= mix(vec3(0.78, 0.74, 0.68), vec3(1.08, 1.06, 1.02), smoothstep(0.3, 0.7, c.b));
   if (fine > 0.0) {
     // grains of soil; here and there a clod or a pale stone standing out of them
-    vec4 s0 = CMT(tStones, p * 2.3 + c.gb * 0.03, 2.3);
+    vec4 s0 = CMT(tStones, p * 2.3 + c.ba * 0.03, 2.3);
     vec4 s1 = CMT(tStones, p.yx * 6.1 + 0.37, 6.1);
     vec3 crumb = vec3(1.02, 0.98, 0.9) * (0.78 + 0.44 * g.b);
     crumb *= 1.0 + step(0.62, s1.g) * smoothstep(0.1, 0.55, s1.b) * (fract(s1.g * 17.3) - 0.45) * 0.62;

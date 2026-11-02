@@ -14,6 +14,7 @@
 
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
+import { wearOn } from '../../core/sweepwear';
 import { LAMP_APPLY_VIEW, LAMP_GLSL, addLampLights, lampUniforms, type LampLight } from '../../core/lampLight';
 
 const LEGACY_LAMPS = typeof location !== 'undefined' && new URLSearchParams(location.search).has('legacylamps');
@@ -238,8 +239,13 @@ float hbRough = -1.0;
     float fade = 1.0 - smoothstep(0.08, 0.3, fw);
     float cr = abs(hbN2(p * 1.7 + 9.0) - 0.5) * 2.0 + 0.25 * hbN2(p * 7.0);
     float crack = (1.0 - smoothstep(0.03, 0.09, cr)) * smoothstep(0.35, 0.6, hbN2(p * 0.6 + 2.0));
+${wearOn('wearrock') ? `
+    // the fracture opens and closes along its length and dies out; under a pixel wide it is a shade, not a line (fw is in the same units)
+    float crO = smoothstep(0.32, 0.72, hbN2(p * 0.6 + 2.0)) * 0.05;
+    float crD = max(cr - 0.03, 0.0);
+    crack = min(1.0, crO / max(fw * 0.7, 1e-4)) * (1.0 - smoothstep(crO * 0.4, crO + fw * 0.7, crD));` : ''}
     float grain = hbN2(p * 37.0);
-    diffuseColor.rgb *= (0.72 + 0.56 * n) * mix(1.0, (1.0 - 0.62 * crack) * (0.9 + 0.2 * grain), fade);
+    diffuseColor.rgb *= (0.72 + 0.56 * n) * mix(1.0, (1.0 - ${wearOn('wearrock') ? '0.5' : '0.62'} * crack) * (0.9 + 0.2 * grain), fade);
     float li = smoothstep(0.6, 0.72, hbN2(p * 1.1 + 13.0) * 0.7 + hbN2(p * 5.3) * 0.3);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.5, 0.47, 0.27) * (0.8 + 0.4 * grain), li * 0.55 * vPat.y);
     hbTilt = (n - 0.5) * 0.8 + (hbN2(p * 6.1 + 3.0) - 0.5) * 0.4;
