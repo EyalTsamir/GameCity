@@ -3,7 +3,8 @@
 // street at walking speed with the city and the clock running, and flags frames where part of the picture changes suddenly, against
 // the frames around it. Those frames go to judges under the `bug` tag.
 //
-//   node scripts/sweep-motion.mjs --url http://127.0.0.1:5198/ [--minutes 60] [--speed 1.6] [--start 0] [--seconds 40]   walk
+//   node scripts/sweep-motion.mjs --url http://127.0.0.1:5198/ [--minutes 60] [--speed 3.4] [--start 0] [--seconds 40]   walk
+//                 (3.4 m/s is the walker's jog: the route is 16.5 km, every walkway both ways, so about 80 minutes)
 //   node scripts/sweep-motion.mjs --retremble 30 --url ...     the worst cells of tremble.jsonl again: is it in the same place every time?
 //   node scripts/sweep-motion.mjs --judge [--max-events 300]   judge what the walk flagged (needs no browser)
 //
@@ -14,6 +15,8 @@
 // How a frame is flagged, on 64×34 block means of each frame, with F the frame under test:
 //   step    F differs from the frame before, and neither the step before nor the step after moved anything like as much
 //   flash   F differs from both neighbours, and those two match
+// and the change is at least 4× what the blocks around it have done for the last second (a fence passing close by keeps them busy),
+// and the patch isn't found a few blocks away in the other frame, which is what a near edge that moved looks like.
 // Steady motion, also of a car or a person near the camera, changes the blocks in every frame, so it doesn't count. A late frame
 // (over 1.7× the median interval) moves everything further than usual, so it and its neighbours are skipped and only counted.
 
@@ -118,7 +121,7 @@ const installWalk = (opts) => {
   small.width = W;
   small.height = H;
   const sx = small.getContext('2d', { willReadFrequently: true });
-  const s = { frames: 0, events: [], late: 0, walked: 0, leg: 0, done: false, ms: [] };
+  const s = { frames: 0, events: [], late: 0, walked: 0, leg: 0, done: false, ms: [], bestAt: new Map(), busy: new Float32Array(W * H) };
   window.__motion = s;
 
   // the route: the walkway graph, depth first, every edge once, there and back where it dead-ends (so both directions get seen);
@@ -201,24 +204,36 @@ const installWalk = (opts) => {
     pos.yaw += d * Math.min(1, dt * 1.6);
     const y = heightAt(x, z) + eye;
     // (not __city.view: it flushes the near-detail queue, and pop-in is what this looks for)
-    c.services.camera.flyTo({ target: { x: x + Math.sin(pos.yaw) * -1.2, y, z: z + Math.cos(pos.yaw) * -1.2 }, distance: 1.2, yaw: (pos.yaw * 180) / Math.PI, pitch: 0 }, 0);
+    // (looking 3° down, as the walker does when it starts)
+    c.services.camera.flyTo({ target: { x: x + Math.sin(pos.yaw) * -1.2, y: y - 1.2 * Math.sin((opts.pitch * Math.PI) / 180), z: z + Math.cos(pos.yaw) * -1.2 }, distance: 1.2, yaw: (pos.yaw * 180) / Math.PI, pitch: opts.pitch }, 0);
     pos.x = x;
     pos.z = z;
   };
 
   // testing the frame before the newest, against two before it and one after
-  const TAU = 8 * 3; // block mean, sum of three channels
+  const TAU = opts.tau * 3; // block mean, sum of three channels
   const test = () => {
     const at = (k) => ring[((s.frames - k) % RING + RING) % RING];
     const [p2, p1, f, n1] = [at(3), at(2), at(1), at(0)];
     if (p2.gap || p1.gap || f.gap || n1.gap) return;
     const flagged = new Uint8Array(W * H);
     const kinds = { step: 0, flash: 0 };
+    // how busy each block has been for about the last second, up to the frame before: a fence passing close by keeps its blocks busy,
+    // and only what stands out from its own surroundings' recent past counts
+    for (let i = 0; i < W * H; i++) {
+      const j = i * 3;
+      s.busy[i] += 0.1 * (Math.abs(p2.blocks[j] - p1.blocks[j]) + Math.abs(p2.blocks[j + 1] - p1.blocks[j + 1]) + Math.abs(p2.blocks[j + 2] - p1.blocks[j + 2]) - s.busy[i]);
+    }
     for (let i = 0; i < W * H; i++) {
       const j = i * 3;
       const dist = (A, B) => Math.abs(A[j] - B[j]) + Math.abs(A[j + 1] - B[j + 1]) + Math.abs(A[j + 2] - B[j + 2]);
       const here = dist(p1.blocks, f.blocks);
       if (here < TAU) continue;
+      const x = i % W,
+        y = (i / W) | 0;
+      let busy = 0;
+      for (let v = Math.max(0, y - 1); v <= Math.min(H - 1, y + 1); v++) for (let u = Math.max(0, x - 1); u <= Math.min(W - 1, x + 1); u++) busy = Math.max(busy, s.busy[v * W + u]);
+      if (here < 4 * busy) continue;
       const before = dist(p2.blocks, p1.blocks);
       const after = dist(f.blocks, n1.blocks);
       const across = dist(p1.blocks, n1.blocks);
@@ -231,7 +246,43 @@ const installWalk = (opts) => {
       }
     }
     if (!kinds.step && !kinds.flash) return;
-    // the largest connected patch: lone blocks are mostly a moving edge crossing a block boundary
+    // A near edge that moves more than a block per frame changes a block only once, like a step. So a flagged block stays only if its
+    // 3×3 patch, or the one it replaced, can't be found nearby in the other frame: it came from nowhere rather than from next door.
+    const R = opts.tau * 3 * 9;
+    const unmatched = (A, B, cx, cy) => {
+      let best = Infinity;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -4; dx <= 4; dx++) {
+          let sad = 0;
+          for (let y = cy - 1; y <= cy + 1 && sad < best; y++) {
+            for (let x = cx - 1; x <= cx + 1; x++) {
+              const u = x + dx,
+                v = y + dy;
+              if (x < 0 || y < 0 || x >= W || y >= H || u < 0 || v < 0 || u >= W || v >= H) {
+                sad += R / 9;
+                continue;
+              }
+              const a = (y * W + x) * 3,
+                b = (v * W + u) * 3;
+              sad += Math.abs(A[a] - B[b]) + Math.abs(A[a + 1] - B[b + 1]) + Math.abs(A[a + 2] - B[b + 2]);
+            }
+          }
+          if (sad < best) best = sad;
+          if (best < R) return false;
+        }
+      }
+      return true;
+    };
+    let kept = 0;
+    for (let i = 0; i < W * H; i++) {
+      if (!flagged[i]) continue;
+      const x = i % W,
+        y = (i / W) | 0;
+      if (unmatched(f.blocks, p1.blocks, x, y) || unmatched(p1.blocks, f.blocks, x, y)) kept++;
+      else flagged[i] = 0;
+    }
+    if (!kept) return;
+    // the largest connected patch
     const label = new Int32Array(W * H);
     let best = null;
     for (let i = 0; i < W * H; i++) {
@@ -261,7 +312,18 @@ const installWalk = (opts) => {
       }
       if (!best || n > best.n) best = { n, x0, x1, y0, y1 };
     }
-    if (best.n < opts.minBlocks) return;
+    if (!best || best.n < opts.minBlocks) return;
+    // (under 3 blocks across it's a bar or a post going past, and the score favours a solid patch of moderate size: the huge ones are a
+    // person or a gull at the lens)
+    const bw0 = best.x1 - best.x0 + 1,
+      bh0 = best.y1 - best.y0 + 1;
+    if (bw0 < 3 || bh0 < 3) return;
+    const score = +((Math.min(best.n, 60) * best.n) / (bw0 * bh0)).toFixed(1);
+    // only the strongest of each 5 m square and kind is worth a read-back
+    const type = kinds.flash > kinds.step ? 'flash' : 'step';
+    const key = `${Math.round((pos.x ?? 0) / 5)},${Math.round((pos.z ?? 0) / 5)},${type}`;
+    if ((s.bestAt.get(key) ?? 0) >= score) return;
+    s.bestAt.set(key, score);
     const m = document.createElement('canvas');
     m.width = RW * 3 + 8;
     m.height = RH;
@@ -274,7 +336,7 @@ const installWalk = (opts) => {
       bw = (RW / W) * (best.x1 - best.x0 + 1),
       bh = (RH / H) * (best.y1 - best.y0 + 1);
     for (let i = 0; i < 3; i++) mx.strokeRect(i * (RW + 4) + bx - 2, by - 2, bw + 4, bh + 4);
-    s.events.push({ type: kinds.flash > kinds.step ? 'flash' : 'step', blocks: best.n, score: best.n, frame: s.frames, x: +(pos.x ?? 0).toFixed(1), z: +(pos.z ?? 0).toFixed(1), yaw: Math.round(((pos.yaw ?? 0) * 180) / Math.PI), hour: +(c.clock.hours ?? 0).toFixed(2), box: [best.x0, best.y0, best.x1, best.y1], jpeg: m.toDataURL('image/jpeg', 0.85) });
+    s.events.push({ type, blocks: best.n, score, frame: s.frames, x: +(pos.x ?? 0).toFixed(1), z: +(pos.z ?? 0).toFixed(1), yaw: Math.round(((pos.yaw ?? 0) * 180) / Math.PI), hour: +(c.clock.hours ?? 0).toFixed(2), box: [best.x0, best.y0, best.x1, best.y1], jpeg: m.toDataURL('image/jpeg', 0.85) });
   };
 
   const orig = c.render;
@@ -287,13 +349,19 @@ const installWalk = (opts) => {
     if (s.ms.length < 120) s.ms.push(ms);
     const med = s.median ?? 33;
     if (s.ms.length === 120 && !s.median) s.median = s.ms.slice().sort((a, b) => a - b)[60];
+    if (opts.keys) {
+      const p = c.camera.position;
+      pos.x = p.x;
+      pos.z = p.z;
+      pos.settle = 0;
+    }
     if (ms > 1.7 * med) {
       lateFor = 3;
       s.late++;
     }
     if (pos.settle > 0 || s.jumped) lateFor = Math.max(lateFor, 3);
     s.jumped = false;
-    if (!s.done) place(Math.min(ms / 1000, 0.2));
+    if (!s.done && !opts.keys) place(Math.min(ms / 1000, 0.2));
     orig(dt);
     const r = ring[s.frames % RING];
     r.x.drawImage(gl, 0, 0, RW, RH);
@@ -410,12 +478,26 @@ try {
     report.retremble = rows;
   } else {
     const prev = fs.existsSync(walkFile) ? JSON.parse(fs.readFileSync(walkFile, 'utf8')) : null;
-    const opts = { speed: parseFloat(args.speed ?? '1.6'), minBlocks: parseInt(args['min-blocks'] ?? '2', 10), leg: args.start !== undefined ? parseInt(args.start, 10) : (prev?.leg ?? 0), i: args.start !== undefined ? 0 : (prev?.i ?? 0) };
+    const opts = { speed: parseFloat(args.speed ?? '3.4'), tau: parseFloat(args.tau ?? '8'), pitch: parseFloat(args.pitch ?? '3'), minBlocks: parseInt(args['min-blocks'] ?? '3', 10), leg: args.start !== undefined ? parseInt(args.start, 10) : (prev?.leg ?? 0), i: args.start !== undefined ? 0 : (prev?.i ?? 0), keys: !!args.keys };
     await page.evaluate(() => {
       window.__city.setHours(10.5);
       window.__city.setSpeed(1);
     });
+    // --keys x,z,yaw: instead of the route, the real walker from there with V and Shift+W, in a straight line, to tell a fault of the
+    // city from one of driving the camera
+    if (args.keys) {
+      const [x, z, yaw] = args.keys.split(',').map(Number);
+      await page.evaluate(([xx, zz, yw]) => window.__city.view({ target: { x: xx, y: 0.15, z: zz }, distance: 6, yaw: yw, pitch: 12 }), [x, z, yaw]);
+      await page.waitForTimeout(2500);
+      await page.mouse.move(960, 512);
+      await page.keyboard.press('KeyV');
+      await page.waitForTimeout(2500);
+    }
     await page.evaluate(installWalk, opts);
+    if (args.keys) {
+      await page.keyboard.down('ShiftLeft');
+      await page.keyboard.down('KeyW');
+    }
     const seconds = args.seconds ? parseFloat(args.seconds) : parseFloat(args.minutes ?? '60') * 60;
     const t0 = Date.now();
     let stop = null;
