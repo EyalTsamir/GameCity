@@ -8,7 +8,7 @@ Two families from `sweep-findings.md`: `wall-material-differs-by-distance` (`fbf
 
 **Cause.** The depth prepass `buildings-prepass` (`src/world/buildings.ts`, high quality only) computed `projectionMatrix * modelViewMatrix * v`, while three's `project_vertex` computes `mv = modelViewMatrix * v`, then `projectionMatrix * mv`. GLSL doesn't promise those round alike. The prepass used `polygonOffset` to stay behind the facade, but the factor is multiplied by the depth slope, and the slope is 0 on a wall facing the camera, which left 1 unit: less than the rounding apart. The facade then failed its LEQUAL test, and the pixel kept `scene.background`, which `sky.ts` copies from the horizon colour every frame. The close-material multiply layer (`blendSrc: DstColor`) stamped mortar on that.
 
-**Fix.** The prepass uses three's order of operations, so both passes round alike, with 4 units as a margin. Either one alone would have been enough in the test below: 0 of 336 with the expression at 1 unit and also at 4. Bigger units alone did not fix it (4 partly, 16 fully, with the old expression), so the expression is the fix and the units are insurance.
+**Fix.** The prepass uses three's order of operations, so both passes round alike, with 4 units as a margin. The expression alone was enough in the test below: 0 of 336 at 1 unit and also at 4. With the old expression, 4 units fixed it only partly and 16 fully, so the expression is the fix and the units are insurance.
 
 **Checked.**
 - Frames at 0°, 1°, 8°: `shots/sweep-white/before.png`, `after.png` (6 buildings × 1, 3, 10 m, noon), `night.png` (fixed, 21.5 h). The white at 0° is gone; 1° and 8° didn't change.
@@ -40,6 +40,10 @@ Rebaked, on AC behind `power-guard`, `abprof.mjs`, two runs each, 4 cycles of 2 
 - Square is not a cost of the fix: the old code skipped the facade there because it failed depth. It's what a wall costs when really shaded, the same as a few degrees off.
 - Motes: no new cost. The draw stays and only its gain changed. Hiding them saves at most 0.3 ms at overview.
 - Masts: +1,496 triangles at overview (3,652,340 against 3,650,844 with `?noavmast`), about 4 µs at 2.5 ns each. The `perf.mjs` reload difference is 0.16 ms in favour of the masts at overview, 0.06 at downtown: noise.
+
+## Final checks
+
+Typecheck and build clean (`dist/index.html` 5.1 MB). Overview at speed 4, 20 s: invariants `{}`, validate `[]`. `hitch.mjs` overview and street at noon: `prog+0` in every window, including `arrive`; one 100 ms freeze on arriving at street. `?diorama`, `?quality=medium`, `?quality=low` at downtown: invariants `{}`, looked at, fine. `ui-test --q noidle`: 73 of 74. The failure was `W walks forward`, not `kinds`; the `walk` step alone passes 9 of 9 twice with the fix and once with `?nosweepwhite`, walking 4.15–4.17 m against the 2.8–5.2 it asks for, so a one-off from a full run on a busy machine, not this round. All 54 events of the level walk on a sheet: no white facade.
 
 ## Conservative choices
 
