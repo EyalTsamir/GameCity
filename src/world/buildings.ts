@@ -13,6 +13,7 @@
 
 import * as THREE from 'three';
 import { perfOn } from '../core/perfdeep';
+import { whiteOn } from '../core/sweepwhite';
 import type { CityContext, CityModule, PickHit } from '../core/context';
 import type { Lot, BuildingKind, Area } from '../core/plan';
 import { DIR_YAW } from '../core/geom';
@@ -306,15 +307,21 @@ export default function create(ctx: CityContext): CityModule {
   // little so that nothing changes on the facade itself. Own trivial program: the old attempt (colorWrite = false on
   // the facade material) still ran the whole facade shader. Main view only (not in the reflection layer).
   if (perfOn('shellprepass') && ctx.quality.level === 'high') {
+    // The same order of operations as three's project_vertex, so that both passes round alike. P * MV first came out nearer than the
+    // facade by more than the push on a wall facing the camera, where the slope term is 0: the facade failed its depth test and the
+    // bare background showed through (docs/progress/sweep-white.md). ?noprepasssame: the old expression and push, to see it.
+    const same = whiteOn('prepasssame');
     const depthOnly = new THREE.ShaderMaterial({
       name: 'buildings-prepass',
-      vertexShader: 'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }',
+      vertexShader: same
+        ? 'void main() { vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 ); gl_Position = projectionMatrix * mvPosition; }'
+        : 'void main() { gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 ); }',
       fragmentShader: 'void main() {}',
       colorWrite: false,
       side: mats.shell.side,
       polygonOffset: true,
       polygonOffsetFactor: 1,
-      polygonOffsetUnits: 1,
+      polygonOffsetUnits: same ? 4 : 1,
     });
     for (const m of shellMeshes) {
       const p = new THREE.Mesh(m.geometry, depthOnly);
