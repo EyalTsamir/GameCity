@@ -7,6 +7,7 @@ change, and no place was named. Stills can't show it, so nobody had been judging
 Branch `claude/kind-gates-528389`, port 5234. Temporal AA is on by default (`?notaa`, `?nosweepflicker`).
 Tool: `scripts/flicker.mjs` (numbers + heat maps), `scripts/flicker-crops.mjs` (sharpness side by side). From a worktree run them with
 `TH_HARNESS=C:/Projects/GameCity/scripts/browser.mjs`, so the browser lock is shared.
+Latest round: "Fix 4" below. Open items: "What is left". Cost of the latest fixes and street moving +1.8 were not measured: the browser queue ran out the time.
 
 ## How it is measured
 `scripts/flicker.mjs` reads truly consecutive frames back in the task that drew them, with the clock fed a steady 1/30 s. Per pixel:
@@ -106,7 +107,7 @@ Against SMAA, hour 12, downtown, street, market (`shots/flick/after3`):
 | wind | 47 → 52 | 5.4 → 5.2 | 2.8 → 2.8 | 3.94 → 4.88 |
 | nudge | 290 → 185 | 33.9 → 17.4 | 18.9 → 5.6 | 4.07 → 3.82 |
 **The win shrank.** Nudge was 94 / 9.6 / 1.3 before this. The market's heat map shows why: its stalls are lit, because every standing vendor and shopper is masked and a 1.5 m range catches the stall around them. Wind with a still camera is now level with SMAA instead of a little better: a leaf is this frame's sample. Sharper at rest.
-Next: mask only people and vehicles actually moving (`m.x` against `m.px`, `V.v`), which should bring most of nudge back. Tried instead, no help: depth-rejected pixels keeping their place in the count (nudge 184 / 17.3), reverted, frames unread.
+Done since, in Fix 4: only what actually moved is masked. Tried instead, no help: depth-rejected pixels keeping their place in the count (nudge 184 / 17.3), reverted, frames unread.
 
 Cost, ms per frame, 2 + 2 interleaved, behind the power guard, hour 12, SMAA → TAA at rest / camera moving (`?taamove`, includes the depth check and the mask):
 | view | SMAA | at rest | moving |
@@ -116,6 +117,23 @@ Cost, ms per frame, 2 + 2 interleaved, behind the power guard, hour 12, SMAA →
 | street | 41.5 | 41.8 | 43.3 |
 | market | 38.7 | 38.2 | 38.6 |
 Rest is within budget at all four. Moving: overview +0.4, over the +0.2 budget by a little and within noise; street **+1.8, over the +0.7 budget**. It was +1.5 before the depth check and mask, so those two cost about 0.3 there; the +1.5 is at this view only and still unexplained.
+
+## Fix 4: mask what moved, calm the rest (2026-11-02, `f578fc2`…`c6046c8`, merged up to `16033b5` by the coordinator)
+- **Only what really moved in the last 4 frames is masked.** A standing vendor no longer takes the stall around them along. Rides and turbines stay masked for good, and birds and cats joined (`c6046c8`): calming washed out pigeons and horses' legs.
+- **At rest, what changes and isn't masked is calmed** (`?taaw=<calm>`, default .12, 1 = off): a running mean clipped to the neighbourhood. .2 was tried first; .12 is about 15 % better in wind, and its washed-out pigeons and horses are why they got masked.
+- **What the screen can't show did not happen**: under .003 the last value stays exactly, and the window for small changes is wider (`05e5ec6`).
+- **Mover AA** (`?taae=<k>`, default .5, 0 = off): a little AA across hard edges on the masked path, since it has no SMAA (`f3176bb`). Frames: bus window frames smoother, lettering no softer. This closes "bus edges with no AA".
+- **Wind fade on far trees, rows, props sway, wall green** (`ab85f17`). It adds little on top of the two above. Real but small.
+- `?taad=.34` (depth-rejected pixels keeping some count): nudge d2 98.25 → 93.65, area8 unchanged at 13.13, area24 2.10 → 1.96. Not enough to carry, removed.
+
+Hour 12, mean of 5 views (overview, downtown, market, tree and lawn at 3 m), wind with a still camera (`a6`, `a7`), and this is the gain over SMAA asked for:
+| | d2 | area3 % | area8 % | area24 % | sharp |
+|---|---|---|---|---|---|
+| SMAA | 125.42 | 20.77 | 14.73 | 7.14 | 3.87 |
+| now (`a7`) | 33.88 | 10.82 | 6.17 | 1.70 | 4.49 |
+Nudge, mean of downtown, street, market (`a7n`): SMAA 290 / 33.9 / 18.9 → **98.25 / 13.13 / 2.10** (d2, area8, area24). Target was 94 / 9.6 / 1.3: d2 about back, area8 and area24 not. Downtown carries it (area8 22.66). Still (`a6n`), noon d2 .01 / 3.62 / 1.76, 21.5 1.14 / 2.0 / 1.24, area8 ≤ .28.
+
+Frames read: `city6` bus at noon and 21.5 still and nudged, walker; `city7` carousel, ferris wheel, turbine, kite, market, bus and walker at 21.5 still. Solid, no ghosts, lettering clean. **Not read: a train** (`taa_12_train_still` found no train in time, the script says MISSING) **and fireworks** (the camera landed inside something: both TAA and SMAA frames are black, a badly aimed test, not a result). Nudged `d34` frames not read since the variant was dropped. Boats read fine at nudge earlier; cranes solid at calm .2, not reread at .12.
 
 ## Fix 2: wind that can't be seen as motion fades out (`?nowindfade`, all tiers)
 A back-and-forth under about a pixel can't be read as motion, only as shimmer. Plants (`vegetation/foliage.ts`, `thMotionKeep`): the oscillating part of the main sway, branch bob and leaf flutter fade once their amplitude falls from 1.2 to 0.35 px at that distance, so flutter is whole within about 23 m and gone by 80 m, bob 47 and 160 m. The mean lean stays, and it uses `uNearEye` / `uNearLens`, so shadows match and zooming in brings it back. Grass (`groundcover/field.ts`): the same fade on `osc` using the pixel size it already knows; neighbours now sway as a wave (phase `rb.x * 1.2`, was `* 6.28`); calm air is calmer (floor 0.12, was 0.3).
@@ -132,11 +150,11 @@ The tree at 3 m is unchanged, as intended: real wind up close stays. A clear hel
 
 ## What is left
 - Frozen picture and light: a pixel whose value drifts more than 0.1 from when the camera stopped (late sun, a long rest) falls back to its plain sample. Stable, no ghost, but the edge loses its settled AA until the camera moves. Not measured how soon that shows.
-- Masked pixels have no AA at all, moving or not: no SMAA on that path. Bus edges read a little harder than with SMAA.
-- Other things that move aren't masked: carousel, cranes, turbines, kites, cloth, birds. They rely on depth and clip; the frozen path can't accumulate on them. Not read in frames. Trains and boats are masked but weren't read in frames either.
-- **Wind fade cost not measured** (a little vertex work per plant vertex, in a vertex-bound scene). Variant `nowindfade` in `perf.mjs`, after `npm run bake`, behind the power guard.
-- Heat maps of the wind condition show bright zig-zag patches that land in different places from run to run: something moving, not wind. Not identified.
-- Wind tremble that remains: not attributed. Half-res AO re-rolling on leaves (`noao` was the largest suspect before these fixes) isn't touched: frozen TAA lets small changes through unfiltered. Far trees (`landscape/trees.ts`), props sway (`props/material.ts`), wall green (`buildings/green.ts`) and rows (`landscape/rows.ts`) don't have the fade yet.
+- Not masked, relying on depth, clip and calm: cranes, kites, cloth. Kite frames are clean. A train and fireworks were not read (Fix 4).
+- **Cost not measured since `436dbb2`**: the `last` target, dead zone, fades, mover AA and the bigger mask. Variants `;notaa;taamove;nowindfade` in `perf.mjs`, after a bake, behind the power guard. **Street +1.8 ms with the camera moving is still unexplained and over budget**: the browser queue didn't allow it. First try `taaj=0&taamove`, to see whether jitter causes it.
+- Zig-zag patches in the wind heat maps: seen in one run at downtown's left, gone in the next at the same view, so something passing rather than wind. Not proven; `skip=rail` would test it.
+- Wind tremble that remains is about a third of SMAA. Half-res AO on leaves not attributed: the dead zone and calm catch part of it. Market wires and bunting: a thin line moving 1.7 px at 25 m is real motion, `thMotionKeep` wouldn't fade it, so no cloth fade was added.
+- Spawn/LOD fade dither on pedestrians (`pedestrians/shader.ts`) reads as a stippled person for a moment. Same under SMAA, not TAA, not touched.
 - **Walking at full speed near the ground has no AA from history, and no SMAA either**, by choice: `walk` is still better than before on the numbers and crisp in the frames. If raw edges read as harsh in real walking, lower `nearPx`'s effect first.
 - A person's own pixels keep some history while overlapping their last position. Frames look solid; not watched in real motion.
 - Nobody has watched this with human eyes at real speed. Numbers and single frames only.
