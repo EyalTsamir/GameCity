@@ -4,6 +4,7 @@
 
 import { Geo } from './geo';
 import { K, ANIM } from './staticMaterial';
+import { shapeOn } from '../../core/sweepshape';
 
 export interface CrossingGearBuild {
   /** lamp centres (for night glows): crossing id, phase (0/1), world position, facing yaw */
@@ -47,6 +48,22 @@ export function buildCrossingGear(g: Geo, id: number, xc: number, zr: number): C
     g.block(u.px, 0.12, u.pz, 0.44, 1.02, 0.44);
     g.color(COL.housingCap);
     g.block(u.px, 1.14, u.pz, 0.5, 0.07, 0.5);
+    const shaped = shapeOn('shapecrossing');
+    if (shaped) {
+      // a door in the housing with its hinges, lock and louvres; a domed lid; bolts through the base flange
+      const f = -u.toTrack * 0.222;
+      g.color('#bdb8aa');
+      g.box(u.px, 0.58, u.pz + f, 0.34, 0.8, 0.006, 0);
+      g.color('#8f8b7f');
+      for (const dy of [0.9, 0.84, 0.78]) g.box(u.px, dy, u.pz + f * 1.02, 0.22, 0.014, 0.008, 0);
+      g.color('#3a3e40');
+      g.box(u.px + 0.12, 0.54, u.pz + f * 1.03, 0.03, 0.09, 0.012, 0);
+      for (const y of [0.3, 0.86]) g.cyl(u.px - 0.175, y, u.pz + f * 1.03, 0.009, 0.009, 0.05, 6, 1);
+      g.color(COL.housingCap);
+      g.sphere(u.px, 1.21, u.pz, 0.32, 10, 3, 0.1);
+      g.color('#7c7f80');
+      for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.cyl(u.px + sx * 0.27, 0.12, u.pz + sz * 0.27, 0.014, 0.014, 0.018, 6, 1);
+    }
     // hub
     g.push().at(u.px, py, bz - u.toTrack * 0.06).rotX(Math.PI / 2);
     g.cyl(0, -0.08, 0, 0.12, 0.12, 0.16, 10, 3);
@@ -61,18 +78,70 @@ export function buildCrossingGear(g: Geo, id: number, xc: number, zr: number): C
       g.kind(K.PLAIN).color(k % 2 === 0 ? COL.red : COL.white);
       const cx = u.px + u.sign * (a + b) / 2;
       const taper = 1 - 0.3 * (k / nSeg);
-      g.box(cx, py, bz, b - a, 0.11 * taper, 0.07, k === nSeg - 1 ? 0 : 1 | 2);
+      if (shaped) {
+        // an aluminium section with soft corners (extruded along x), not a square bar
+        const hh = 0.055 * taper,
+          hw = 0.035,
+          c = 0.014;
+        g.push().at(cx, py, bz, Math.PI / 2);
+        g.prism(
+          [
+            [-hw, -hh + c],
+            [-hw + c, -hh],
+            [hw - c, -hh],
+            [hw, -hh + c],
+            [hw, hh - c],
+            [hw - c, hh],
+            [-hw + c, hh],
+            [-hw, hh - c],
+          ],
+          -(b - a) / 2,
+          (b - a) / 2,
+          0,
+        );
+        g.pop();
+      } else g.box(cx, py, bz, b - a, 0.11 * taper, 0.07, k === nSeg - 1 ? 0 : 1 | 2);
+    }
+    if (shaped) {
+      // a rubber cap on the end, a rubber strip along the underside, a clamp at the hub
+      const tx = u.px + u.sign * (len + 0.03);
+      g.kind(K.PLAIN).color('#1b1c1d');
+      g.box(tx, py, bz, 0.07, 0.085, 0.078, 0);
+      g.box(u.px + u.sign * (0.12 + (len - 0.12) / 2), py - 0.05, bz, len - 0.12, 0.018, 0.04, 0);
+      g.color('#55595b');
+      g.box(u.px + u.sign * 0.2, py, bz, 0.2, 0.135, 0.095, 0);
+      g.color('#7c7f80');
+      for (const dx of [0.14, 0.26]) for (const s of [-1, 1]) g.box(u.px + u.sign * dx, py + s * 0.04, bz + 0.05, 0.016, 0.016, 0.006, 0);
     }
     // counterweight behind the pivot
     g.kind(K.PLAIN).color(COL.weight);
-    g.box(u.px - u.sign * 0.45, py, bz, 0.5, 0.24, 0.16, 0);
+    if (shaped) {
+      // cast plates threaded on the arm's tail, with the tie bolt showing
+      g.box(u.px - u.sign * 0.34, py, bz, 0.34, 0.07, 0.05, 0);
+      for (let i = 0; i < 4; i++) {
+        const w = 0.16 + (i === 0 || i === 3 ? -0.015 : 0);
+        g.box(u.px - u.sign * (0.28 + i * 0.1), py, bz, 0.088, 0.26 - (i === 3 ? 0.02 : 0), w, 0);
+      }
+      g.color('#7c7f80');
+      for (const s of [-1, 1]) g.box(u.px - u.sign * 0.43, py + s * 0.085, bz + 0.082, 0.38, 0.012, 0.006, 0);
+    } else g.box(u.px - u.sign * 0.45, py, bz, 0.5, 0.24, 0.16, 0);
     // boom lamps (three, on top)
     for (const d of [1.45, 2.85, 4.25]) {
       const lx = u.px + u.sign * d;
       g.kind(K.PLAIN).color(COL.hood);
-      g.box(lx, py + 0.085, bz, 0.09, 0.06, 0.09, 0);
-      g.kind(boomKind).color(COL.lampOff);
-      g.box(lx, py + 0.085, bz + u.toTrack * 0.0, 0.1, 0.045, 0.1, 0);
+      if (shaped) {
+        // a round lamp on a stalk, red lens both ways
+        g.box(lx, py + 0.058, bz, 0.03, 0.02, 0.03, 0);
+        g.push().at(lx, py + 0.11, bz).rotX(Math.PI / 2);
+        g.cyl(0, -0.03, 0, 0.056, 0.056, 0.06, 12, 1);
+        g.kind(boomKind).color(COL.lampOff);
+        g.cyl(0, -0.036, 0, 0.044, 0.044, 0.072, 12, 1);
+        g.pop();
+      } else {
+        g.box(lx, py + 0.085, bz, 0.09, 0.06, 0.09, 0);
+        g.kind(boomKind).color(COL.lampOff);
+        g.box(lx, py + 0.085, bz + u.toTrack * 0.0, 0.1, 0.045, 0.1, 0);
+      }
       boomLamps.push({ id, x: lx, y: py + 0.09, z: bz, pivotX: u.px, pivotY: py, sign: u.sign });
     }
     g.anim(0);

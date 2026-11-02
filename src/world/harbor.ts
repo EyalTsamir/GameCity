@@ -23,7 +23,9 @@ import { createBeamMesh, createHarborMaterials, createGlowMesh, followCraneLamps
 import { buildBreakwater, setArmourStones, setBreakwaterLife, setLighthouseRoom } from './harbor/breakwater';
 import { setArmourSoft } from './harbor/geo';
 import { geomHunt } from '../core/geomhunt';
-import { buildFishQuay, setQuayDetail } from './harbor/quay';
+import { buildFishQuay, setQuayDecals, setQuayDetail } from './harbor/quay';
+import { QuayDecals } from './harbor/decals';
+import { wearFix } from '../core/sweepwear';
 import { buildCarouselRotating, buildCarouselStatic, buildPier, buildWheelRotating, buildWheelStatic, setGondolaDetail, setCarouselDetail, setBoothDetail, setKioskDetail, setWheelHubDetail, type WheelSpec } from './harbor/pier';
 import { buildFerryDock, lifeguardTower, scatterBeach, setBeachDetail, setBeachToys, setFerryDockDetail } from './harbor/beach';
 import { boxHunt } from '../core/boxhunt';
@@ -56,6 +58,8 @@ export default function create(ctx: CityContext): CityModule {
   setContainerDetail(boxHunt(ctx, 'containerkit'));
   const rig = mats.rig;
   const glows: GlowPoint[] = [];
+  const quayDecals = wearFix(ctx.quality.level, 'wearquay', 'low') ? new QuayDecals() : null;
+  setQuayDecals(quayDecals);
   const north = new HB();
   const yards = new HB();
   const beach = new HB();
@@ -324,6 +328,9 @@ export default function create(ctx: CityContext): CityModule {
     meshes.push(m);
     return m;
   };
+  setQuayDecals(null);
+  const decalMesh = quayDecals?.mesh();
+  if (decalMesh) ctx.scene.add(decalMesh);
   addStatic(north, 'harbor-north');
   addStatic(yards, 'harbor-yards');
   addStatic(beach, 'harbor-beach');

@@ -5,6 +5,7 @@
 //
 // Extras on the sink: #0 aRM (roughness, metalness), #1 aEmit (rgb * strength, mode).
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import { GeoSink, Shaper } from '../vegetation/geo';
 import type { Rng } from '../../core/rng';
@@ -346,25 +347,54 @@ export function bench(k: Kit, style: 'classic' | 'modern' | 'wood', rng: Rng, le
   // classic: cast-iron ends, painted or natural slats
   const iron = '#2a2d2e';
   k.m(iron, 'iron');
-  for (const x of [-0.84, 0.84]) {
-    sh.box(x, 0.21 - legDrop / 2, 0.19, 0.06, 0.42 + legDrop, 0.06, 1);
-    sh.beam(x, -legDrop, -0.17, x, 0.88, -0.32, 0.06, 0.06);
-    sh.box(x, 0.41, 0.0, 0.06, 0.05, 0.46, 0);
-    sh.box(x, 0.64, 0.03, 0.07, 0.04, 0.42, 0);
-    sh.beam(x, 0.42, 0.2, x, 0.64, 0.2, 0.05, 0.05, false);
-  }
-  // feet: cast pads with an anchor bolt each; a flat-iron centre bearer under the slats
-  for (const x of [-0.84, 0.84])
-    for (const z of [0.19, -0.17]) {
-      sh.box(x, 0.006 - legDrop, z, 0.1, 0.012, 0.09, 1);
-      boltY(sh, x + 0.032, 0.012 - legDrop, z, 0.01);
+  if (shapeOn('shapebench')) {
+    // the ends were cast, so they curve: the back sweeps from the rear foot up and over, the front leg bows, the arm rolls over its post
+    const run = (x: number, pts: [number, number][], w: number, h: number): void => {
+      for (let i = 0; i + 1 < pts.length; i++) sh.beam(x, pts[i][1], pts[i][0], x, pts[i + 1][1], pts[i + 1][0], w, h, i === 0 || i === pts.length - 2);
+    };
+    for (const x of [-0.84, 0.84]) {
+      run(x, [[-0.25, -legDrop], [-0.225, 0.07], [-0.185, 0.22], [-0.165, 0.42], [-0.195, 0.56], [-0.255, 0.7], [-0.315, 0.83], [-0.345, 0.9], [-0.385, 0.93]], 0.045, 0.034);
+      run(x, [[0.27, -legDrop], [0.245, 0.07], [0.205, 0.22], [0.195, 0.42]], 0.045, 0.034);
+      run(x, [[-0.175, 0.415], [-0.02, 0.405], [0.1, 0.415], [0.215, 0.44]], 0.05, 0.03);
+      // the arm and the post that carries it
+      run(x, [[0.2, 0.42], [0.215, 0.5], [0.205, 0.58], [0.19, 0.645]], 0.036, 0.03);
+      run(x, [[-0.25, 0.69], [-0.13, 0.675], [0.03, 0.67], [0.16, 0.665], [0.245, 0.64], [0.27, 0.6], [0.245, 0.575]], 0.05, 0.026);
+      // a cast rosette where the arm meets the post, a brace in the angle under the seat
+      sh.push().local(x, 0.615, 0.2, 0, 0, Math.PI / 2).cyl(0, -0.028, 0, 0.022, 0.022, 0.056, 10, 2).pop();
+      run(x, [[-0.17, 0.27], [-0.04, 0.34], [0.06, 0.4]], 0.022, 0.02);
+      run(x, [[0.2, 0.27], [0.1, 0.34], [0.05, 0.4]], 0.022, 0.02);
     }
-  sh.box(0, 0.415, 0.0, 0.03, 0.035, 0.44, 0);
-  sh.beam(0, 0.42, -0.2, 0, 0.82, -0.31, 0.03, 0.02, false);
-  // scrolled armrests on the ends
-  for (const x of [-0.84, 0.84]) {
-    sh.beam(x, 0.64, 0.2, x, 0.66, -0.12, 0.05, 0.035);
-    sh.cyl(x, 0.6, 0.22, 0.03, 0.03, 0.05, 8, 2);
+    // feet: cast pads, a bolt in each
+    for (const x of [-0.84, 0.84])
+      for (const z of [0.275, -0.255]) {
+        sh.box(x, 0.009 - legDrop, z, 0.13, 0.018, 0.12, 1);
+        sh.box(x, 0.024 - legDrop, z, 0.085, 0.014, 0.08, 1);
+        boltY(sh, x + 0.045, 0.018 - legDrop, z + 0.03, 0.01);
+        boltY(sh, x - 0.045, 0.018 - legDrop, z - 0.03, 0.01);
+      }
+    sh.box(0, 0.415, 0.0, 0.03, 0.035, 0.44, 0);
+    sh.beam(0, 0.42, -0.2, 0, 0.82, -0.31, 0.03, 0.02, false);
+  } else {
+    for (const x of [-0.84, 0.84]) {
+      sh.box(x, 0.21 - legDrop / 2, 0.19, 0.06, 0.42 + legDrop, 0.06, 1);
+      sh.beam(x, -legDrop, -0.17, x, 0.88, -0.32, 0.06, 0.06);
+      sh.box(x, 0.41, 0.0, 0.06, 0.05, 0.46, 0);
+      sh.box(x, 0.64, 0.03, 0.07, 0.04, 0.42, 0);
+      sh.beam(x, 0.42, 0.2, x, 0.64, 0.2, 0.05, 0.05, false);
+    }
+    // feet: cast pads with an anchor bolt each; a flat-iron centre bearer under the slats
+    for (const x of [-0.84, 0.84])
+      for (const z of [0.19, -0.17]) {
+        sh.box(x, 0.006 - legDrop, z, 0.1, 0.012, 0.09, 1);
+        boltY(sh, x + 0.032, 0.012 - legDrop, z, 0.01);
+      }
+    sh.box(0, 0.415, 0.0, 0.03, 0.035, 0.44, 0);
+    sh.beam(0, 0.42, -0.2, 0, 0.82, -0.31, 0.03, 0.02, false);
+    // scrolled armrests on the ends
+    for (const x of [-0.84, 0.84]) {
+      sh.beam(x, 0.64, 0.2, x, 0.66, -0.12, 0.05, 0.035);
+      sh.cyl(x, 0.6, 0.22, 0.03, 0.03, 0.05, 8, 2);
+    }
   }
   const slat = rng.chance(0.45) ? '#3f6b4b' : rng.chance(0.5) ? '#a0704a' : '#8f5f3d';
   k.m(slat, slat === '#3f6b4b' ? 'paint' : 'wood');
@@ -424,8 +454,11 @@ export function bin(k: Kit, modern: boolean, rng?: Rng): void {
     poly(sh, [0.235, 0.91, -0.235, 0.235, 0.91, 0.235, 0.0, 0.95, 0.0], 0.15, 0.99, 0);
     poly(sh, [0.235, 0.91, 0.235, -0.235, 0.91, 0.235, 0.0, 0.95, 0.0], 0, 0.99, 0.15);
     poly(sh, [-0.235, 0.91, 0.235, -0.235, 0.91, -0.235, 0.0, 0.95, 0.0], -0.15, 0.99, 0);
-    k.m('#26292b', 'steel');
-    sh.box(0, 0.952, 0, 0.09, 0.008, 0.09, 0);
+    // the stub plate: a raised rim and its slots (only the top faces of the slots)
+    k.m('#8f959a', 'steel');
+    sh.box(0, 0.952, 0, 0.11, 0.008, 0.11, 0);
+    k.m('#141618', 'steel');
+    for (let i = -2; i <= 2; i++) sh.box(0, 0.9565, i * 0.018, 0.078, 0.001, 0.008, 1 | 4 | 8 | 16 | 32);
     // the hood's turned-down skirt (a 4 cm hemmed lip with a rolled bead) and its shadowed underside, so the
     // lid reads as a pressed cap rather than a slab; a polished hand-worn strip on the front edge
     k.m('#b3babf', 'steel');
@@ -1654,6 +1687,28 @@ export function shed(k: Kit, paint: number, rng: Rng, kd?: Kit): void {
 
 export function waterButt(k: Kit, rng: Rng): void {
   const sh = k.sh;
+  if (shapeOn('shapebench')) {
+    // moulded ribs on two concrete blocks, a lid with a grip, a brass tap with a can under it
+    const col = rng.chance(0.5) ? '#3f6e4a' : '#3a5f7d';
+    k.m('#8e8c86', 'stone');
+    cbox(sh, -0.17, 0.09, 0, 0.2, 0.18, 0.44, 0.012, 0);
+    cbox(sh, 0.17, 0.09, 0, 0.2, 0.18, 0.44, 0.012, 0);
+    k.m(col, 'plastic');
+    sh.cyl(0, 0.18, 0, 0.27, 0.3, 0.86, 24, 1);
+    for (let i = 0; i < 4; i++) sh.cyl(0, 0.32 + i * 0.19, 0, 0.285 + i * 0.007, 0.287 + i * 0.007, 0.035, 24, 0);
+    sh.cyl(0, 1.02, 0, 0.303, 0.303, 0.03, 24, 0);
+    k.m('#2c2f2e', 'plastic');
+    sh.cyl(0, 1.04, 0, 0.312, 0.27, 0.035, 24, 2);
+    sh.cyl(0, 1.075, 0, 0.27, 0.05, 0.03, 18, 2);
+    sh.box(0, 1.115, 0, 0.14, 0.022, 0.03, 0);
+    k.m('#b8924a', 'steel');
+    sh.push().local(0, 0.3, 0.285, Math.PI / 2).cyl(0, 0, 0, 0.018, 0.018, 0.07, 8, 2).pop();
+    sh.cyl(0, 0.255, 0.35, 0.012, 0.016, 0.045, 8, 0);
+    sh.box(0, 0.325, 0.345, 0.05, 0.012, 0.012, 0);
+    k.m('#5f8f6a', 'paint');
+    sh.cyl(0.02, 0, 0.5, 0.085, 0.1, 0.2, 14, 1);
+    return;
+  }
   k.m(rng.chance(0.5) ? '#3f6e4a' : '#3a5f7d', 'plastic');
   sh.cyl(0, 0, 0, 0.3, 0.33, 0.85, 10, 2);
   k.m('#2c2f2e', 'plastic');

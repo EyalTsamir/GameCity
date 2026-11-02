@@ -16,7 +16,8 @@ import type { LandscapeModel } from './model';
 import { WL, CX, CZ } from './model';
 import { FROW, toField, fromField, rowB, colB, colOff, colW, rowHedge, colHedge, lhash, fieldsOfParcel, cropKind, plotHedge, CK } from './fields';
 import { hash2i, vnoise, smooth } from './noise';
-import { WIND_GLSL } from '../../core/wind';
+import { MOTION_KEEP_GLSL, WIND_GLSL } from '../../core/wind';
+import { globalUniforms } from '../../core/uniforms';
 import { SLAB } from '../../core/constants';
 import type { HedgeSink } from './farmkit';
 import { natureOn, moonLift } from '../../core/nature';
@@ -936,7 +937,7 @@ vec3 treeAlbedo(float kind, float tint, float crown, float ly) {
 
 function treeMaterial(uniforms: Record<string, THREE.IUniform>, fog: boolean, leaf: THREE.Texture): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88, metalness: 0, fog, side: THREE.DoubleSide });
-  const u = { ...uniforms, tLeaf: { value: leaf } };
+  const u = { ...uniforms, tLeaf: { value: leaf }, uNearEye: globalUniforms.uNearEye, uNearLens: globalUniforms.uNearLens };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u);
     shader.vertexShader = shader.vertexShader
@@ -956,7 +957,10 @@ varying float vTint;
 varying float vKind;
 varying float vLocalY;
 varying float vLocalY0;
-${WIND_GLSL}`,
+uniform vec3 uNearEye;
+uniform float uNearLens;
+${WIND_GLSL}
+${MOTION_KEEP_GLSL}`,
       )
       .replace(
         '#include <begin_vertex>',
@@ -975,7 +979,7 @@ vLocalY0 = position.y;
   float bend = position.y * position.y * aCrown;
   float ph = aInst.w * 6.2831 + uTime * 1.3;
   // world-space sway (m) at the crown top, mapped back into the instance's local frame
-  vec2 sway = wv * (0.25 + 0.12 * sin(ph)) * bend;
+  vec2 sway = wv * (0.25 + 0.12 * sin(ph) * thMotionKeep(base, 0.12 * length(wv) * bend)) * bend;
   float w2 = max(dot(instanceMatrix[0].xyz, instanceMatrix[0].xyz), 0.25);
   transformed.xz += vec2(dot(instanceMatrix[0].xz, sway), dot(instanceMatrix[2].xz, sway)) / w2;
 }`,

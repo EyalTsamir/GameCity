@@ -9,6 +9,7 @@
 import * as THREE from 'three';
 import type { CityContext, CityModule } from '../core/context';
 import { closeMat } from '../core/closemat';
+import { wearFix, wearOn } from '../core/sweepwear';
 import { WATER_LEVEL } from '../core/constants';
 import { globalUniforms } from '../core/uniforms';
 import { nearOf } from '../core/nearDetail';
@@ -102,10 +103,13 @@ export default function create(ctx: CityContext): CityModule {
     uWinDepth: (ctx.services.buildings as { uniforms?: { uWinDepth: THREE.IUniform } } | undefined)?.uniforms?.uWinDepth ?? { value: 0 },
   };
 
+  const wearDefs: Record<string, number> = {};
+  if (wearOn('wearcrack')) wearDefs.CM_FISSURE = 1; // (with the switch off the tile holds the old network)
+  if (wearFix(ctx.quality.level, 'wearrust')) wearDefs.CM_WEARRUST = 1;
   const material = (name: string, frag: string, define: string, radius: number, offset: number): THREE.ShaderMaterial =>
     new THREE.ShaderMaterial({
       name: `closemat-${name}`,
-      defines: { [define]: 1, CM_LIM: (radius / REF_PX).toFixed(5) },
+      defines: { [define]: 1, CM_LIM: (radius / REF_PX).toFixed(5), ...wearDefs },
       uniforms: shared,
       vertexShader: CM_VERT,
       fragmentShader: CM_COMMON + frag,

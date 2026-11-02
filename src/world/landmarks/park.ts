@@ -4,6 +4,7 @@
 // Every solid part stays inside the feature radius / rect (pedestrian paths run right next
 // to them).
 
+import { shapeOn } from '../../core/sweepshape';
 import { lmDetail } from '../../core/lmdetail';
 import * as THREE from 'three';
 import type { Feature } from '../../core/plan';
@@ -549,6 +550,41 @@ function S_gold() {
 
 // ───────────────────────────────────────────────────────────── bandstand ──
 
+/** a bentwood chair and, in front of it, a music stand: what stays on the stage when the band has gone home */
+function bandChair(env: Env, x: number, y: number, z: number, ry: number): void {
+  const K = env.S;
+  const wood = M('#5a3a26', PAT.PLAIN, 0.55);
+  const sn = Math.sin(ry),
+    cs = Math.cos(ry);
+  // local (u across, v toward the front) to world
+  const P = (u: number, h: number, v: number): V3 => [x + u * cs + v * sn, y + h, z - u * sn + v * cs];
+  const seat = P(0, 0.43, 0);
+  K.cyl(M('#8a6a44', PAT.PLAIN, 0.6), 0.19, 0.185, 0.025, seat[0], seat[1], seat[2], 14);
+  K.torus(wood, 0.188, 0.012, seat[0], seat[1] + 0.012, seat[2], 5, 18);
+  for (const [u, v] of [[-0.14, 0.14], [0.14, 0.14]]) K.rod(wood, P(u * 1.15, 0, v * 1.15), P(u * 0.85, 0.43, v * 0.85), 0.012, 6);
+  // back legs run on up, bent over into the back
+  for (const u of [-0.13, 0.13]) {
+    K.rod(wood, P(u * 1.2, 0, -0.2), P(u, 0.43, -0.15), 0.012, 6);
+    K.rod(wood, P(u, 0.43, -0.15), P(u * 0.92, 0.72, -0.2), 0.012, 6);
+    K.rod(wood, P(u * 0.92, 0.72, -0.2), P(u * 0.45, 0.84, -0.215), 0.012, 6);
+  }
+  K.rod(wood, P(-0.06, 0.84, -0.215), P(0.06, 0.84, -0.215), 0.012, 6);
+  K.rod(wood, P(-0.12, 0.6, -0.18), P(0.12, 0.6, -0.18), 0.009, 5);
+  K.torus(wood, 0.13, 0.008, seat[0], y + 0.24, seat[2], 4, 16);
+  // the stand: a tripod, a stem, a tilted desk with its lip, a part left open on it
+  const iron = M('#1f2226', PAT.PLAIN, 0.45, 0.4);
+  const foot = P(0, 0, 0.62);
+  for (let k = 0; k < 3; k++) {
+    const a = (k / 3) * Math.PI * 2 + 0.5;
+    K.rod(iron, [foot[0] + Math.sin(a) * 0.2, y, foot[2] + Math.cos(a) * 0.2], [foot[0], y + 0.26, foot[2]], 0.006, 4);
+  }
+  K.rod(iron, [foot[0], y + 0.2, foot[2]], [foot[0], y + 1.02, foot[2]], 0.007, 5);
+  // (facing the chair: back toward the audience)
+  K.boxC(iron, 0.48, 0.3, 0.008, foot[0], y + 1.14, foot[2], 0.42, ry, 0);
+  K.boxC(iron, 0.48, 0.022, 0.04, foot[0] - sn * 0.052, y + 1.005, foot[2] - cs * 0.052, 0.42, ry, 0);
+  K.boxC(M('#efe6cf', PAT.PLAIN, 0.8), 0.42, 0.27, 0.004, foot[0] - sn * 0.005, y + 1.14, foot[2] - cs * 0.005, 0.42, ry, 0);
+}
+
 export function genBandstand(env: Env, f: Feature): void {
   const R = Math.min(Number(f.params?.radius ?? 3), (f.radius || 3.2) - 0.05);
   env.begin(f.x, 0, f.z, f.yaw);
@@ -567,7 +603,23 @@ export function genBandstand(env: Env, f: Feature): void {
   for (let i = 0; i < 8; i++) {
     const a = rot + ((i + 0.5) / 8) * Math.PI * 2;
     if (Math.abs(Math.atan2(Math.sin(a), Math.cos(a))) < 0.4) continue;
-    K.panel(M('#2a2420', PAT.PLAIN, 0.9), 0.7, 0.45, Math.sin(a) * (pr * 0.93 + 0.012), 0.25, Math.cos(a) * (pr * 0.93 + 0.012), a);
+    const vx = Math.sin(a) * (pr * 0.93 + 0.012),
+      vz = Math.cos(a) * (pr * 0.93 + 0.012);
+    K.panel(M('#2a2420', PAT.PLAIN, 0.9), 0.7, 0.45, vx, 0.25, vz, a);
+    if (shapeOn('shapebandstand')) {
+      // a cast-iron grille in its frame: bars across, a stone sill
+      const out = 0.012;
+      const gx = Math.sin(a),
+        gz = Math.cos(a);
+      const tx = Math.cos(a),
+        tz = -Math.sin(a);
+      const fr = M('#2f5a46', PAT.PLAIN, 0.5, 0.4);
+      K.box(fr, 0.76, 0.035, 0.03, vx + gx * out, 0.235, vz + gz * out, a);
+      K.box(fr, 0.76, 0.035, 0.03, vx + gx * out, 0.68, vz + gz * out, a);
+      for (const sd of [-1, 1]) K.box(fr, 0.035, 0.45, 0.03, vx + gx * out + tx * sd * 0.363, 0.25, vz + gz * out + tz * sd * 0.363, a);
+      for (let b = 1; b < 9; b++) K.box(fr, 0.016, 0.42, 0.016, vx + gx * out + tx * (-0.35 + b * 0.078), 0.265, vz + gz * out + tz * (-0.35 + b * 0.078), a);
+      K.box(M('#b9b0a2', PAT.STONE, 0.85), 0.86, 0.05, 0.07, vx + gx * 0.02, 0.19, vz + gz * 0.02, a);
+    }
   }
   K.steps(M('#b9b0a2', PAT.STONE, 0.85, 0, 0, FLOOD.SOFT, 0.3), 1.4, 4, stageH / 4, 0.12, 0, 0, R - 0.02);
   const colR = pr - 0.18;
@@ -670,7 +722,8 @@ export function genBandstand(env: Env, f: Feature): void {
   ];
   for (const [sx, sz, col] of seats) {
     const ry = Math.atan2(-sx, 1.4 - sz) * 0.6;
-    K.box(M('#5a3a26', PAT.PLAIN, 0.8), 0.4, 0.45, 0.4, sx, stageH, sz);
+    if (shapeOn('shapebandstand')) bandChair(env, sx, stageH, sz, ry);
+    else K.box(M('#5a3a26', PAT.PLAIN, 0.8), 0.4, 0.45, 0.4, sx, stageH, sz);
     env.anim({ mode: ANIM.VIS, pivot: new THREE.Vector3(sx, stageH + 0.45, sz), axis: new THREE.Vector3(Math.cos(ry), 0, -Math.sin(ry)), a: 1, b: 0.06, c: sx * 3 });
     person(env.K, sx, stageH + 0.0, sz, ry, col, '#1f2226', '#e8c3a0', '#1f2226', true);
   }

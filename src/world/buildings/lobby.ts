@@ -7,6 +7,7 @@
 //
 // ?nolobby3d = the old shader lobby, ?nogroundfit = no stall risers / mullions on the shader bays (core/detailbuildings.ts).
 
+import { shapeOn } from '../../core/sweepshape';
 import { anchors } from './anchors';
 import * as THREE from 'three';
 import type { Builder } from './mesh';
@@ -832,11 +833,39 @@ export function kioskRoom(g: Gen, sg: SideGeom, a: number, b: number, y0: number
       bz = Z(su + k * 0.17, so + 0.24);
     l.beam(ax, y0 + 0.36, az, bx, y0 + 0.04, bz, 0.09, 0.09);
   }
-  l.setColor(skin);
-  l.sphere(cx, y0 + 0.62, cz, 0.115, 8, 6);
-  for (const k of [-1, 1]) l.sphere(X(su + k * 0.17, so + 0.27), y0 + 0.05, Z(su + k * 0.17, so + 0.27), 0.05, 5, 4);
-  l.setColor(hex(ice ? '#ffffff' : r.pick(['#2a221c', '#5a3d25', '#8d8a84'])));
-  l.sphere(X(su, so - 0.015), y0 + 0.66, Z(su, so - 0.015), 0.112, 8, 4);
+  if (shapeOn('shapekiosk')) {
+    // shoulders over the arms and a neck, so the head sits on someone; a face; a paper cap or hair
+    l.setColor(shirt);
+    for (const k of [-1, 1]) l.sphere(X(su + k * 0.17, so), y0 + 0.36, Z(su + k * 0.17, so), 0.082, 10, 7);
+    l.sphere(cx, y0 + 0.4, cz, 0.15, 12, 6);
+    if (ice) {
+      l.setColor(hex('#ff8fab'));
+      for (const k of [-1, 1]) sideBox(l, sg, su + k * 0.09 - 0.012, su + k * 0.09 + 0.012, so + 0.13, so + 0.16, y0 + 0.2, y0 + 0.5);
+    }
+    l.setColor(skin);
+    l.cylinder(cx, cz, 0.052, y0 + 0.46, y0 + 0.58, 10, false, 0.046);
+    l.sphere(cx, y0 + 0.655, cz, 0.105, 14, 10);
+    l.sphere(X(su, so + 0.104), y0 + 0.645, Z(su, so + 0.104), 0.016, 6, 4);
+    for (const k of [-1, 1]) l.sphere(X(su + k * 0.098, so), y0 + 0.65, Z(su + k * 0.098, so), 0.022, 6, 4);
+    for (const k of [-1, 1]) l.sphere(X(su + k * 0.17, so + 0.27), y0 + 0.05, Z(su + k * 0.17, so + 0.27), 0.05, 10, 7);
+    l.setColor(hex('#2a2320'));
+    for (const k of [-1, 1]) l.sphere(X(su + k * 0.038, so + 0.095), y0 + 0.672, Z(su + k * 0.038, so + 0.095), 0.0105, 6, 4);
+    l.setColor(skin.clone().multiplyScalar(0.62));
+    sideBox(l, sg, su - 0.026, su + 0.026, so + 0.088, so + 0.1, y0 + 0.602, y0 + 0.61);
+    if (ice) {
+      l.setColor(hex('#ffffff'));
+      l.cylinder(cx, cz, 0.104, y0 + 0.715, y0 + 0.79, 14, true, 0.112);
+    } else {
+      l.setColor(hex(r.pick(['#2a221c', '#5a3d25', '#8d8a84'])));
+      l.sphere(X(su, so - 0.016), y0 + 0.685, Z(su, so - 0.016), 0.103, 14, 7);
+    }
+  } else {
+    l.setColor(skin);
+    l.sphere(cx, y0 + 0.62, cz, 0.115, 8, 6);
+    for (const k of [-1, 1]) l.sphere(X(su + k * 0.17, so + 0.27), y0 + 0.05, Z(su + k * 0.17, so + 0.27), 0.05, 5, 4);
+    l.setColor(hex(ice ? '#ffffff' : r.pick(['#2a221c', '#5a3d25', '#8d8a84'])));
+    l.sphere(X(su, so - 0.015), y0 + 0.66, Z(su, so - 0.015), 0.112, 8, 4);
+  }
 
   if (ice) {
     // back wall: shelf of cones, sundae glasses, the menu; the freezer under its glass at the counter
@@ -849,7 +878,8 @@ export function kioskRoom(g: Gen, sg: SideGeom, a: number, b: number, y0: number
       l.setColor(hex('#d9a35b'));
       const px = X(u, -dep + 0.1),
         pz = Z(u, -dep + 0.1);
-      for (let j = 0; j < 2; j++) l.cone(px, pz, 0.05, yS + 0.24 + j * 0.05, yS + j * 0.05, 6);
+      const coneSides = shapeOn('shapekiosk') ? 12 : 6;
+      for (let j = 0; j < 2; j++) l.cone(px, pz, 0.05, yS + 0.24 + j * 0.05, yS + j * 0.05, coneSides);
     }
     const flav = ['#fff1c9', '#ff9ccf', '#a8e6cf', '#6b4226', '#f6ee8c', '#b8d67a', '#d94f70', '#f5f0e6'];
     // the menu: a cream board, a coloured scoop and a dark line of writing per flavour
@@ -874,8 +904,24 @@ export function kioskRoom(g: Gen, sg: SideGeom, a: number, b: number, y0: number
       for (let k = 0; k < n; k++) {
         const u = a + 0.15 + k * 0.2;
         const o = -0.31 + row * 0.19;
-        l.setColor(hex(flav[(k * 3 + row * 5) % flav.length], 1.15));
-        l.sphere(X(u, o), y0 + 0.05, Z(u, o), 0.08, 6, 3);
+        const fc = flav[(k * 3 + row * 5) % flav.length];
+        if (shapeOn('shapekiosk')) {
+          // a steel tub in the counter, the ice cream mounded and worked with the paddle, not a ball
+          l.setColor(hex('#aeb6ba'));
+          sideBox(l, sg, u - 0.088, u + 0.088, o - 0.082, o + 0.082, y0 + 0.025, y0 + 0.04, true);
+          l.setColor(hex(fc, 1.05));
+          sideBox(l, sg, u - 0.076, u + 0.076, o - 0.07, o + 0.07, y0 + 0.04, y0 + 0.05, true);
+          l.setColor(hex(fc, 1.15));
+          l.sphere(X(u - 0.015, o + 0.01), y0 + 0.052, Z(u - 0.015, o + 0.01), 0.058, 12, 7);
+          l.sphere(X(u + 0.032, o - 0.022), y0 + 0.05, Z(u + 0.032, o - 0.022), 0.04, 10, 6);
+          if ((k + row) % 3 === 0) {
+            l.setColor(hex('#d7dcdf'));
+            l.beam(X(u + 0.05, o + 0.03), y0 + 0.07, Z(u + 0.05, o + 0.03), X(u + 0.075, o + 0.075), y0 + 0.17, Z(u + 0.075, o + 0.075), 0.012, 0.006);
+          }
+        } else {
+          l.setColor(hex(fc, 1.15));
+          l.sphere(X(u, o), y0 + 0.05, Z(u, o), 0.08, 6, 3);
+        }
       }
     }
     // sneeze glass

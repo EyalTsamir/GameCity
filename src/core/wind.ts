@@ -17,12 +17,23 @@
 // `t` is simulation seconds (globalUniforms.uTime / clock.simTime) so everything freezes when paused.
 // Debug: ?wind=<strength> pins the strength, ?winddir=<deg> pins the direction (0 = towards +X).
 
+import { flickerOn } from './sweepflicker';
 import * as THREE from 'three';
 import type { WorldClock } from './time';
 
 /** front speed (m/s) per unit of wind strength, plus a floor so calm air still shows slow swells */
 const FRONT_SPEED = 7.5;
 const FRONT_MIN = 1.6;
+
+/**
+ * How much of a back-and-forth of amp metres at p to keep: under a pixel it can't be seen as motion, only as shimmer (?nowindfade,
+ * docs/progress/sweep-flicker.md). Needs `uniform vec3 uNearEye; uniform float uNearLens;` (globalUniforms): the main camera in the shadow pass too.
+ */
+export const MOTION_KEEP_GLSL = /* glsl */ `
+float thMotionKeep( vec3 p, float amp ) {
+  ${flickerOn('windfade') ? 'return smoothstep( 0.35, 1.2, amp * 1400.0 * uNearLens / max( distance( p, uNearEye ), 0.5 ) );' : 'return 1.0;'}
+}
+`;
 
 export const WIND_GLSL = /* glsl */ `
 float thGust( vec2 xz ) {

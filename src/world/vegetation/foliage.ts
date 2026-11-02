@@ -21,8 +21,7 @@
 
 import * as THREE from 'three';
 import type { GlobalUniforms } from '../../core/uniforms';
-import { WIND_GLSL } from '../../core/wind';
-import { flickerOn } from '../../core/sweepflicker';
+import { MOTION_KEEP_GLSL, WIND_GLSL } from '../../core/wind';
 import { closeNatureOn } from '../../core/closenature';
 import { LAMP_GLSL, lampUniforms } from '../../core/lampLight';
 import { wrappedPhysicalPars, NOISE_GLSL } from './material';
@@ -312,10 +311,7 @@ uniform float uThFarKeep;
 uniform vec3 uNearEye;
 uniform float uNearLens;
 ${WIND_GLSL}
-/** how much of a back-and-forth of amp metres at p to keep: under a pixel it can't be seen as motion, only as shimmer (?nowindfade) */
-float thMotionKeep( vec3 p, float amp ) {
-  ${flickerOn('windfade') ? 'return smoothstep( 0.35, 1.2, amp * 1400.0 * uNearLens / max( distance( p, uNearEye ), 0.5 ) );' : 'return 1.0;'}
-}
+${MOTION_KEEP_GLSL}
 /** near weight of plant #id (LOD texture, 1024 texels per row) */
 float thLodW( float id ) {
   int i = int( id + 0.5 );

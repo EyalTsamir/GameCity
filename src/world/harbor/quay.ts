@@ -8,6 +8,7 @@
 
 import * as THREE from 'three';
 import { HB, PAT, type V3 } from './geo';
+import type { QuayDecals } from './decals';
 import type { Rng } from '../../core/rng';
 import { addActor } from '../../sim/pedestrians/actorDefs';
 
@@ -535,12 +536,26 @@ function hose(b: HB, x: number, y: number, z: number, toX: number, toZ: number):
 /** ground stain decal (oil, wet, fish-water) 1.5 cm above the quay */
 /** wet concrete (melt water from the iced boxes, the hose, a landed catch): glossy dark pool with loose drops */
 function wet(b: HB, x: number, y: number, z: number, w: number, d: number, scale: number): void {
+  if (decals) {
+    decals.add(x, y + 0.018, z, w, d, '#4a4e4d', true);
+    return;
+  }
   b.color('#4a4e4d').pat(PAT.WET, scale);
   b.quad([x - w / 2, y + 0.018, z - d / 2], [x - w / 2, y + 0.018, z + d / 2], [x + w / 2, y + 0.018, z + d / 2], [x + w / 2, y + 0.018, z - d / 2]);
   b.pat(PAT.NONE);
 }
 
-export function stain(b: HB, x: number, y: number, z: number, w: number, d: number, col: string, scale: number, lift = 0.015): void {
+/** `wearquay`: stains soak into the ground (decals.ts) instead of being cut out of the solid mesh */
+let decals: QuayDecals | null = null;
+export function setQuayDecals(d: QuayDecals | null): void {
+  decals = d;
+}
+
+export function stain(b: HB, x: number, y: number, z: number, w: number, d: number, col: string, scale: number, lift = 0.015, strength = 1): void {
+  if (decals) {
+    decals.add(x, y + lift, z, w, d, col, false, strength);
+    return;
+  }
   b.color(col).pat(PAT.STAIN, scale);
   b.quad([x - w / 2, y + lift, z - d / 2], [x - w / 2, y + lift, z + d / 2], [x + w / 2, y + lift, z + d / 2], [x + w / 2, y + lift, z - d / 2]);
   b.pat(PAT.NONE);
@@ -704,7 +719,7 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
       // traffic lanes: long faint dark smears with lighter scuffs between
       for (const lx of [126.4, 131.5]) {
         const w = 1.0 + rr() * 0.6;
-        if (clearRail(lx, w)) stain(b, lx + (rr() - 0.5) * 0.4, y(lx, z), z + 1.2, w, 1.8 + rr() * 0.35, rr() < 0.5 ? '#5b5d5a' : '#666761', 0.35 + rr() * 0.3, 0.011);
+        if (clearRail(lx, w)) stain(b, lx + (rr() - 0.5) * 0.4, y(lx, z), z + 1.2, w, 1.8 + rr() * 0.35, rr() < 0.5 ? '#5b5d5a' : '#666761', 0.35 + rr() * 0.3, 0.011, 0.45);
       }
       const k = rr();
       const x = 126 + rr() * 9.5,
@@ -723,7 +738,7 @@ export function buildFishQuay(b: HB, o: FishQuayOpts): void {
       stain(b, 135.3, y(135.3, z), z, 0.9, 1.2, '#6a4a2e', 0.5, 0.024);
       if (rr() < 0.6) stain(b, 134.4, y(134.4, z + 3), z + 3, 0.6, 0.6, '#d8d6cc', 0.5, 0.026);
     }
-    for (let z = -118; z < -24; z += 6) stain(b, 135.6, y(135.6, z), z + 3, 0.5, 5.8, '#55605c', 0.4, 0.013);
+    for (let z = -118; z < -24; z += 6) stain(b, 135.6, y(135.6, z), z + 3, 0.5, 5.8, '#55605c', 0.4, 0.013, 0.6);
   }
   // a few spilled bits: a dropped glove, rope ends, a crushed can, a gull feather — the life between jobs
   b.color('#e3622a');

@@ -1647,6 +1647,14 @@ const FRAG_COLOR = /* glsl */ `
       float st = vPedPat < 1.5 ? (step(0.47, hh) - step(0.52, hh)) + (step(0.6, hh) - step(0.65, hh)) : (step(0.78, hh) - step(0.86, hh));
       if (vPedPat < 1.5) st *= step(0.0, vPedS);
       pc = mix(pc, vec3(0.78, 0.78, 0.76), st);
+#ifndef PED_FAR
+      if (vPedPat > 1.5) {
+        // terry and the shadow of soft folds, somewhere else on every towel
+        vec2 tq = vPedRest.xz * vec2(9.0, 6.5) + vec2(fract(vPedHgt * 37.3) * 9.0);
+        float tf = sin(tq.x + 1.7 * sin(tq.y * 0.8)) * sin(tq.y * 1.3 + 2.1 * sin(tq.x * 0.6));
+        pc *= 0.96 + 0.075 * tf;
+      }
+#endif
     }
 #ifndef PED_FAR
 #ifdef PED_CLOSE

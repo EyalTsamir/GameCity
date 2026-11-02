@@ -6,7 +6,7 @@
 // Switches (core/closehand.ts): ?nohand all; ?nohanddoors ?nohandlamps ?nohandpipes ?nohandwalls ?nohandstains; layers ?nohandBig ?nohandFine ?nohandStain.
 
 import * as THREE from 'three';
-import type { CityContext, CityModule } from '../core/context';
+import type { CityContext, CityModule, QualityLevel } from '../core/context';
 import { closeHand } from '../core/closehand';
 import { nearDither, nearOf, nearRandom, nearRadiusFor } from '../core/nearDetail';
 import { globalUniforms } from '../core/uniforms';
@@ -17,6 +17,7 @@ import { patchLampMaterial } from './lamps/integrate';
 import type { BuildingsService, HandDoor, HandFrame, HandPipe, HandWall } from './buildings/anchors';
 import { WALLPAT } from './buildings/materials';
 import { makeCloseTiles } from './closemat/textures';
+import { wearFix, type WallStain } from '../core/sweepwear';
 import { propSpots } from './lettering/spots';
 import { HandSink, handStandIn } from './handheight/sink';
 import * as D from './handheight/doors';
@@ -86,7 +87,7 @@ function handMaterial(grain: THREE.Texture): THREE.MeshStandardMaterial {
 }
 
 /** a ratio on what is already there, as closemat does: no light, no fog; it can only darken */
-function stainMaterial(): THREE.MeshBasicMaterial {
+function stainMaterial(level: QualityLevel): THREE.MeshBasicMaterial {
   const m = new THREE.MeshBasicMaterial({
     vertexColors: true,
     transparent: true,
@@ -104,6 +105,22 @@ function stainMaterial(): THREE.MeshBasicMaterial {
     polygonOffsetUnits: -10,
   });
   m.name = 'handheight-stain';
+  if (wearFix(level, 'wearhand')) {
+    // a stain follows the fall of the water and the surface's own pores: runs and thin places, no polygon edge
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.tHsCrack = { value: makeCloseTiles().crack };
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vHsW;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvHsW = (modelMatrix * vec4(position, 1.0)).xyz;');
+      sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform sampler2D tHsCrack;\nvarying vec3 vHsW;').replace(
+        '#include <color_fragment>',
+        `#include <color_fragment>
+  float hsU = vHsW.x + vHsW.z;
+  vec4 hsA = texture2D(tHsCrack, vec2(hsU * 0.9, vHsW.y * 0.07));
+  vec4 hsB = texture2D(tHsCrack, vec2(hsU * 0.31, vHsW.y * 0.31) + 0.37);
+  diffuseColor.rgb = pow(diffuseColor.rgb, vec3(max(0.0, 0.1 + 1.5 * smoothstep(0.25, 0.8, hsA.a * 0.6 + hsB.b * 0.4))));`,
+      );
+    };
+    m.customProgramCacheKey = () => 'handheight-stain-wear';
+  }
   return m;
 }
 
@@ -469,6 +486,7 @@ export default function create(ctx: CityContext): CityModule {
     const onWall = (w: HandWall, s: HandSink): HandSink => s.frame(w.x, 0, w.z, w.tx, w.tz, w.nx, w.nz);
     const pos = (w: HandWall, u: number): [number, number] => [w.x + w.tx * u, w.z + w.tz * u];
     const stains = closeHand(ctx, 'handstains');
+    if (stains) for (const f of (ctx.services.wallStains ?? []) as WallStain[]) put(STAIN, f.x, f.z, (s) => s.frame(f.x, 0, f.z, f.tx, f.tz, f.nx, f.nz).ink(f.ink).streak(-f.w, f.w, f.y0, f.y1, 0.0014));
     const FRONT: Record<string, [number, number]> = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] };
 
     const nearPipes: HandPipe[] = [];
@@ -972,7 +990,7 @@ export default function create(ctx: CityContext): CityModule {
     if (grids[t].size === 0) continue;
     near.addMeshes({
       ...L,
-      material: t === STAIN ? stainMaterial() : t === BIG ? big : t === COAT ? coat : fine,
+      material: t === STAIN ? stainMaterial(ctx.quality.level) : t === BIG ? big : t === COAT ? coat : fine,
       build: build(t),
       standIn: handStandIn(),
       receiveShadow: t !== STAIN,

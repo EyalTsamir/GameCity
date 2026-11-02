@@ -3,13 +3,14 @@
 // here and the shaders only pick and weigh it. Each brick, stone or board reads its own window of a tile: no repeat shows.
 //
 //   grain   RG slope of a rough mineral surface (0.5 = flat), B height, A pits       tile 0.6 m, 1.2 mm a texel
-//   crack   R distance to a wandering crack network (1 = 4 cm or more), G cell id,
+//   crack   R distance to a crack (1 = 4 cm or more), G half width of that crack (`?nowearcrack`: a warped Voronoi and a cell id),
 //           B soft blotches (~0.5 m), A ragged flakes (~5 cm)                        tile 2.56 m, 5 mm a texel
 //   fibre   RG slope of long fibres (grain runs along u), B height, A pores          tile 1.2 × 0.3 m, 2.3 × 0.6 mm a texel
 //   stones  R distance to the edge of a stone (1 = half a cell), G stone id, B dome
 //           height, A distance to the edge of a coarser stone                        tile 0.8 m, 64 + 24 stones across
 
 import * as THREE from 'three';
+import { wearOn } from '../../core/sweepwear';
 
 const N = 512;
 
@@ -144,6 +145,82 @@ function grainTile(aniso: number): THREE.DataTexture {
   return texture(data, 'closemat-grain', aniso);
 }
 
+/**
+ * Cracks as they break (`wearcrack`): each a zig-zag grown both ways from its widest point, forking, thinning to nothing at every
+ * tip. Written to R (distance to the nearest crack, 1 = 4 cm or more) and G (half width of that crack there, 1 = the widest).
+ * The shader multiplies G by how much strain the surface is under, so a crack opens out of nothing and never stops dead.
+ */
+function growCracks(data: Uint8Array): void {
+  const best = new Float32Array(N * N).fill(1e9);
+  const texel = 2.56 / N;
+  const reach = 0.04 / texel;
+  let s = 1;
+  const rnd = () => hash(s++, 7, 61);
+  const stamp = (x0: number, y0: number, x1: number, y1: number, w0: number, w1: number) => {
+    const ax = x0 / texel,
+      ay = y0 / texel,
+      bx = x1 / texel,
+      by = y1 / texel;
+    const dx = bx - ax,
+      dy = by - ay;
+    const l2 = Math.max(1e-6, dx * dx + dy * dy);
+    const i0 = Math.floor(Math.min(ax, bx) - reach),
+      i1 = Math.ceil(Math.max(ax, bx) + reach),
+      j0 = Math.floor(Math.min(ay, by) - reach),
+      j1 = Math.ceil(Math.max(ay, by) + reach);
+    for (let j = j0; j <= j1; j++) {
+      const row = (((j % N) + N) % N) * N;
+      for (let i = i0; i <= i1; i++) {
+        const t = Math.max(0, Math.min(1, ((i + 0.5 - ax) * dx + (j + 0.5 - ay) * dy) / l2));
+        const qx = i + 0.5 - ax - dx * t,
+          qy = j + 0.5 - ay - dy * t;
+        const d = qx * qx + qy * qy;
+        const k = row + (((i % N) + N) % N);
+        if (d < best[k]) {
+          best[k] = d;
+          const m = k * 4;
+          data[m] = Math.min(255, Math.round((Math.sqrt(d) / reach) * 255));
+          data[m + 1] = Math.round((w0 + (w1 - w0) * t) * 255);
+        }
+      }
+    }
+  };
+  const walk = (x: number, y: number, ang: number, len: number, w: number, depth: number) => {
+    let a = ang,
+      done = 0;
+    while (done < len) {
+      // straight breaks and sudden turns, pulled back to the way the strain runs: a zig-zag, not a worm
+      const step = 0.012 + 0.05 * rnd() * rnd();
+      a = ang + (a - ang) * 0.45 + (rnd() - 0.5) * 1.5;
+      const nx = x + Math.cos(a) * step,
+        ny = y + Math.sin(a) * step;
+      const t0 = done / len,
+        t1 = Math.min(1, (done + step) / len);
+      const w0 = w * Math.pow(1 - t0, 0.8),
+        w1 = w * Math.pow(1 - t1, 0.8);
+      stamp(x, y, nx, ny, w0, w1);
+      if (depth < 3 && t0 < 0.85 && rnd() < step * 2.6) {
+        const side = rnd() < 0.5 ? -1 : 1;
+        walk(nx, ny, a + side * (0.45 + 0.8 * rnd()), len * (1 - t0) * (0.35 + 0.4 * rnd()), w1 * (0.5 + 0.3 * rnd()), depth + 1);
+      }
+      x = nx;
+      y = ny;
+      done += step;
+    }
+  };
+  // steep and diagonal more often than level: walls crack that way; on the ground the tile has no up
+  const dirs = [Math.PI / 2, Math.PI / 4, (3 * Math.PI) / 4, Math.PI / 3, (2 * Math.PI) / 3, Math.PI / 6, 0];
+  for (let n = 0; n < 26; n++) {
+    const x = rnd() * 2.56,
+      y = rnd() * 2.56;
+    const ang = dirs[Math.floor(rnd() * dirs.length) % dirs.length] + (rnd() - 0.5) * 0.5;
+    const len = 0.45 + 0.9 * rnd(),
+      w = 0.4 + 0.6 * rnd() * rnd();
+    walk(x, y, ang, len, w, 0);
+    walk(x, y, ang + Math.PI, len * (0.6 + 0.5 * rnd()), w, 0);
+  }
+}
+
 function crackTile(aniso: number): THREE.DataTexture {
   // a Voronoi of 8 × 8 points with its coordinates pushed about: borders wander like real cracks
   const wx = new Float32Array(N * N),
@@ -216,6 +293,13 @@ function crackTile(aniso: number): THREE.DataTexture {
   octave(flake, 192, 192, 0.28, 54);
   normalize(flake);
   put(data, 3, flake);
+  if (wearOn('wearcrack')) {
+    for (let k = 0; k < N * N; k++) {
+      data[k * 4] = 255;
+      data[k * 4 + 1] = 0;
+    }
+    growCracks(data);
+  }
   return texture(data, 'closemat-crack', aniso);
 }
 

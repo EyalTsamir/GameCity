@@ -1,6 +1,7 @@
 // Small civic features: flagpoles on the Town Square, market stalls, sports-court hoops,
 // picnic tables.
 
+import { shapeOn } from '../../core/sweepshape';
 import * as THREE from 'three';
 import type { Feature } from '../../core/plan';
 import { ANIM, M, PAT, type Mat } from './builder';
@@ -120,6 +121,13 @@ function stallGoods(env: Env, f: Feature): Goods {
   }
   return goodsOf.get(f.id) ?? GOODS[(f.id * 7 + 3) % GOODS.length];
 }
+
+// what comes off a lathe, one of each for all the stalls (?noshapemarket): unit radius, y in the same unit
+const lathe8 = (p: [number, number][], seg = 8): THREE.LatheGeometry => new THREE.LatheGeometry(p.map(([x, y]) => new THREE.Vector2(x, y)), seg);
+const _jarBody = lathe8([[0.0, 0.0], [0.92, 0.0], [1.0, 0.09], [1.0, 1.9], [0.84, 2.18], [0.72, 2.34]]);
+const _jarLid = lathe8([[0.79, 2.3], [0.8, 2.56], [0.62, 2.63], [0.0, 2.63]]);
+const _jarLabel = lathe8([[1.012, 0.42], [1.012, 1.56]]);
+const _wheelCheese = lathe8([[0.0, 0.0], [0.93, 0.0], [1.0, 0.1], [1.03, 0.4], [1.0, 0.7], [0.93, 0.8], [0.0, 0.8]], 12);
 
 /** Slatted wooden crate (w × h × d, bottom at y): bottom, two slats per long side with a gap, solid
  *  ends with a hand hole, corner battens. */
@@ -310,6 +318,13 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
         if (kind === 'CHEESE') {
           if ((i + j + L) % 2) continue;
           const cr = r * (0.85 + rnd() * 0.25);
+          if (shapeOn('shapemarket')) {
+            // a wheel with a soft rim, not a drum; now and then one cut, its pale inside showing
+            const cy = y + ly * r * 0.8;
+            _mm.makeRotationY(rnd() * 6.3).scale(_sc.set(cr, cr, cr)).setPosition(px, cy, pz);
+            K.geoM(m, _wheelCheese, _mm);
+            continue;
+          }
           if (lod) {
             K.cylOn(m, cr, cr, cr * 0.8, px, y + ly * r * 0.8, pz, 9);
             K.cyl(M(c0.clone().multiplyScalar(0.7), PAT.PLAIN, 0.7), cr * 1.005, cr * 1.005, cr * 0.12, px, y + ly * r * 0.8 + cr * 0.34, pz, 9, true);
@@ -320,6 +335,14 @@ function produce(K: Env['S'], goods: Goods, ci: number, w: number, d: number, x:
         } else if (kind === 'HONEY') {
           const hy = y + L * r * 2.3;
           const hr = r * (rnd() < 0.3 ? 0.55 : 0.7);
+          if (shapeOn('shapemarket')) {
+            // a jar: rounded shoulders into a neck, a lid that overhangs it, a paper label
+            _mm.makeRotationY(rnd() * 6.3).scale(_sc.set(hr, hr, hr)).setPosition(px, hy, pz);
+            K.geoM(m, _jarBody, _mm);
+            K.geoM(M(rnd() < 0.5 ? '#c9b26a' : '#d8d2c4', PAT.PLAIN, 0.4, 0.6), _jarLid, _mm);
+            if (rnd() < 0.8) K.geoM(M(rnd() < 0.6 ? '#ece6d4' : '#d9c79a', PAT.PLAIN, 0.8), _jarLabel, _mm);
+            continue;
+          }
           if (lod) {
             K.cyl(m, hr, hr, hr * 2.6, px, hy, pz, 6, true);
             K.cylOn(M(rnd() < 0.5 ? '#c9b26a' : '#d8d2c4', PAT.PLAIN, 0.4, 0.6), hr * 1.03, hr * 1.03, r * 0.3, px, hy + hr * 2.6, pz, 6);
@@ -462,7 +485,8 @@ export function genMarketStall(env: Env, f: Feature): void {
       const a = P(i, j), b = P(i + 1, j), c = P(i + 1, j + 1), d = P(i, j + 1);
       const uv: [number, number][] = [[a[0], a[2]], [b[0], b[2]], [c[0], c[2]], [d[0], d[2]]];
       CK.poly(canopy, [a, b, c, d], uv);
-      CK.poly(under, [d, c, b, a], uv);
+      // (the kinetic kit is double-sided: on the same vertices, with the other diagonal, the lining fought the cloth in patches the wind moved)
+      CK.poly(under, [d, c, b, a].map((q) => (stallWind ? [q[0], q[1] - 0.02, q[2]] : q)) as [number, number, number][], uv);
     }
   // scalloped valance along the front edge
   for (let i = 0; i < 10; i++) {

@@ -12,6 +12,7 @@
 // Geometry goes into the props kits: big items into the fine furniture kit (< 300 m), small things into the
 // near-detail cells (< ~30 m). Toggles: ?nomarketlife ?noterracelife ?nobackyard (all off on the low tier).
 
+import { wearOn, type WallStain } from '../../core/sweepwear';
 import type { CityContext } from '../../core/context';
 import type { CityPlan as Plan, Area } from '../../core/plan';
 import { OCC } from '../../core/occupancy';
@@ -603,15 +604,22 @@ function acUnit(k: Kit, kd: Kit): void {
   k.m('#e4e4e0', 'paint');
   cbox(sh, 0, 2.12, 0.19, 0.8, 0.58, 0.3, 0.015, 0);
   k.m('#2a2d30', 'iron');
-  sh.cyl(-0.1, 2.12, 0.345, 0.2, 0.2, 0.005, 16, 2, true);
+  // (a fan faces out; lying flat, all that showed of it was a black arc on the front)
+  if (wearOn('wearhand')) {
+    sh.push().local(-0.1, 2.12, 0.345, Math.PI / 2, 0, 0);
+    sh.cyl(0, 0, 0, 0.2, 0.2, 0.005, 16, 2, true);
+    sh.pop();
+  } else sh.cyl(-0.1, 2.12, 0.345, 0.2, 0.2, 0.005, 16, 2, true);
   kd.m('#b8bcc0', 'iron');
   for (let i = 0; i < 5; i++) kd.sh.box(-0.1, 1.95 + i * 0.085, 0.352, 0.4, 0.008, 0.008, 0);
   for (let i = -2; i <= 2; i++) kd.sh.box(-0.1 + i * 0.085, 2.12, 0.353, 0.008, 0.4, 0.008, 0);
   kd.m('#d8d4cc', 'plastic');
   kd.sh.tube(0.32, 1.85, 0.2, 0.32, 0.2, 0.05, 0.012, 0.012, 5);
   kd.sh.tube(0.32, 2.0, 0.1, -0.5, 2.0, 0.02, 0.025, 0.025, 6);
-  kd.m('#3a4040', 'stone');
-  kd.sh.box(0.32, 0.6, 0.006, 0.1, 1.2, 0.002, 0);
+  if (!wearOn('wearhand')) {
+    kd.m('#3a4040', 'stone');
+    kd.sh.box(0.32, 0.6, 0.006, 0.1, 1.2, 0.002, 0);
+  }
 }
 
 /** Downpipe from the eaves to a water butt with a diverter. Plane z = 0, height top. */
@@ -1310,8 +1318,15 @@ function backyard(e: PlacesEnv, info: PlacesInfo): void {
     wallItem(gapAt(main, 0) + 0.1, (k) => broom(k), 0.2);
     if (!wallItem(Math.max(main.s0, main.a0 + 0.3), (k) => downpipeButt(k, rng, main.eave), 0.4)) wallItem(gapAt(main, 0) - 0.3, (k) => downpipeButt(k, rng, main.eave), 0.4);
     const other = walls.find((w) => w !== main);
-    wallItem(other ? gapAt(other, 1) : gapAt(main, 0), (k, kd) => {
+    wallItem(other ? gapAt(other, 1) : gapAt(main, 0), (k, kd, x, y, z) => {
       k.sh.local(0, 0.5, 0);
+      if (wearOn('wearhand')) {
+        // (the small parts stay with the unit, and what drips off it runs down the wall as a stain: handheight draws it)
+        kd.sh.local(0, 0.5, 0);
+        const px = x + ed.ux * 0.32,
+          pz = z + ed.uz * 0.32;
+        ((e.ctx.services.wallStains ??= []) as WallStain[]).push({ x: px, z: pz, tx: ed.ux, tz: ed.uz, nx, nz, y0: y + top, y1: y + top + 0.72, w: 0.07, ink: 0x8f897c });
+      }
       acUnit(k, kd);
     }, 0.2);
   }

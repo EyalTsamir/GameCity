@@ -23,6 +23,13 @@ import type { GeoBuilder, V3 } from './builder';
 import type { TerrainModel } from './height';
 import { KIND } from './kinds';
 import type { GlowPoint } from './glow';
+import type { PlaceStains } from './stains';
+
+/** where drips and rust go (`wearwall`): set for the length of buildPlacesStone; null draws the old quads */
+let stains: PlaceStains | null = null;
+export function setPlaceStains(s: PlaceStains | null): void {
+  stains = s;
+}
 
 const C = (h: string) => new THREE.Color(h);
 const COL = {
@@ -229,6 +236,11 @@ function copingBlocks(b: GeoBuilder, q: QuayPlace, cop: number): void {
   }
   // rust bled from the mooring bollards on to the stone
   for (const p of q.bollards) {
+    if (stains) {
+      const k = 0.85 + 0.3 * hh(p.x);
+      stains.flat(p.x + (hh(p.x * 3.1) - 0.5) * 0.06, q.y + 0.004, p.z - 0.05, Math.min(q.zEdge + 0.07, p.z + 0.5 + 0.25 * hh(p.x * 7.1)), 0.14 + 0.06 * hh(p.x * 2.3), [0.64 * k, 0.46 * k, 0.32 * k]);
+      continue;
+    }
     b.color(RUST.clone().multiplyScalar(0.85 + 0.3 * hh(p.x))).set('aMas', KIND.plain, 0, 1, 0);
     const y = q.y + 0.002,
       w = 0.26 + 0.1 * hh(p.x * 2.3);
@@ -258,16 +270,19 @@ function quayWeathering(b: GeoBuilder, q: QuayPlace, yC: number): void {
   const slow = (x: number) => Math.sin(x * 0.31) * 0.5 + Math.sin(x * 0.83 + 1.3) * 0.3;
   // the river rises and falls: tones stacked from damp stone down to slime, each edge torn on its own, so that no one line
   // reads as a painted band
+  if (stains) stains.band(q.x0, q.x1, zf + 0.006, W - 0.3, yC, W, false);
   const st = COL.quayStone;
   const layer = (col: THREE.Color, h: number, torn: number, s0: number, s1: number, seed: number, dz: number) =>
     band(col, zf + dz, W - 0.3, (x) => W + h + 0.035 * slow(x + seed * 0.3) + torn * (hh(x * 3.7 + seed) - 0.5), s0, s1, seed);
-  layer(st.clone().multiplyScalar(0.8), 0.5, 0.1, 0.3, 0.8, 11, 0);
-  layer(st.clone().multiplyScalar(0.64).lerp(WETSTONE, 0.3), 0.37, 0.09, 0.26, 0.65, 17, 0.001);
-  layer(WETSTONE, 0.25, 0.08, 0.22, 0.55, 23, 0.002);
-  layer(SLIME.clone().lerp(WETSTONE, 0.4), 0.14, 0.07, 0.2, 0.5, 29, 0.003);
-  layer(SLIME, 0.07, 0.06, 0.18, 0.42, 37, 0.004);
+  if (!stains) {
+    layer(st.clone().multiplyScalar(0.8), 0.5, 0.1, 0.3, 0.8, 11, 0);
+    layer(st.clone().multiplyScalar(0.64).lerp(WETSTONE, 0.3), 0.37, 0.09, 0.26, 0.65, 17, 0.001);
+    layer(WETSTONE, 0.25, 0.08, 0.22, 0.55, 23, 0.002);
+    layer(SLIME.clone().lerp(WETSTONE, 0.4), 0.14, 0.07, 0.2, 0.5, 29, 0.003);
+    layer(SLIME, 0.07, 0.06, 0.18, 0.42, 37, 0.004);
+  }
   // green where the wall stays wet: patches on the slime line
-  for (let x = q.x0 + 0.5, k = 0; x < q.x1 - 0.8; x += 0.4 + 3 * hh(x * 0.71 + 4) ** 2, k++) {
+  for (let x = q.x0 + 0.5, k = 0; !stains && x < q.x1 - 0.8; x += 0.4 + 3 * hh(x * 0.71 + 4) ** 2, k++) {
     const w = 0.2 + 0.5 * hh(x * 1.9);
     b.color(WEED.clone().multiplyScalar(0.65 + 0.4 * hh(k * 1.1))).set('aMas', KIND.plain, 0, 1, 0);
     b.quadFacing([x, W - 0.1, zf + 0.005], [x + w, W - 0.1, zf + 0.005], [x + w, W + 0.015 + 0.05 * hh(x * 2.7), zf + 0.005], [x, W + 0.02 + 0.06 * hh(x * 3.3), zf + 0.005], 0, 0, 1);
@@ -276,6 +291,11 @@ function quayWeathering(b: GeoBuilder, q: QuayPlace, yC: number): void {
   for (let x = q.x0 + 0.4, k = 0; x < q.x1 - 0.4; x += 0.6 + 1.5 * hh(x * 0.43), k++) {
     const len = 0.1 + 0.3 * hh(x * 1.7) ** 1.5;
     const w = 0.05 + 0.12 * hh(x * 2.3);
+    if (stains) {
+      const t = 0.66 + 0.16 * hh(k * 3.1);
+      stains.run(x, zf + 0.006, yC, w * 0.8, len * 2.2, [t, t, t * 0.97]);
+      continue;
+    }
     b.color(MORTAR.clone().lerp(COL.quayStone, 0.45 + 0.3 * hh(k * 3.1))).set('aMas', KIND.plain, 0, 1, 0);
     b.quadFacing([x - w * 0.35, yC - len, zf], [x + w * 0.35, yC - len, zf], [x + w / 2, yC, zf], [x - w / 2, yC, zf], 0, 0, 1);
   }
@@ -283,6 +303,10 @@ function quayWeathering(b: GeoBuilder, q: QuayPlace, yC: number): void {
   for (const p of q.bollards) {
     if (hh(p.x * 1.9) < 0.45) continue;
     const w = 0.14 + 0.12 * hh(p.x * 1.3);
+    if (stains) {
+      stains.run(p.x, zf + 0.006, yC, w * 0.55, 0.42 + 0.3 * hh(p.x * 2.1), [0.84, 0.68, 0.52]);
+      continue;
+    }
     b.color(RUSTFACE).set('aMas', KIND.plain, 0, 1, 0);
     b.quadFacing([p.x - w * 0.3, yC - 0.2, zf + 0.001], [p.x + w * 0.25, yC - 0.24, zf + 0.001], [p.x + w / 2, yC, zf + 0.001], [p.x - w / 2, yC, zf + 0.001], 0, 0, 1);
   }
@@ -828,6 +852,11 @@ function cuttingWeathering(b: GeoBuilder, K: CuttingPlace, nP: number): void {
     const near = ((x - K.x0) / ((K.x1 - K.x0) / nP)) % 1;
     if (near < 0.12 || near > 0.88) continue;
     const len = 0.25 + 0.4 * hh(x);
+    if (stains) {
+      const t = 0.68 + 0.1 * hh(x + 3);
+      stains.run(x + (hh(x + 1) - 0.5) * 0.04, zf + 0.006, 0.47, 0.1 + 0.04 * hh(x + 2), len * 1.6, [t, t, t * 0.94]);
+      continue;
+    }
     strip(x + (hh(x + 1) - 0.5) * 0.04, 0.1, 0.16 + 0.1 * hh(x + 2), Math.max(-0.2, 0.45 - len), 0.45, DAMP, x);
   }
   // drip stains from the coping: narrow streaks (a little darker than the stone) every 0.5–1.5 m, 0.3–1.4 m long
@@ -835,6 +864,11 @@ function cuttingWeathering(b: GeoBuilder, K: CuttingPlace, nP: number): void {
     const pil = ((x - K.x0) / ((K.x1 - K.x0) / nP)) % 1;
     if (pil < 0.06 || pil > 0.94) continue;
     const len = 0.3 + 1.1 * hh(x * 1.7) ** 1.5;
+    if (stains) {
+      const t = 0.76 + 0.12 * hh(k * 3.1);
+      stains.run(x, zf + 0.006, K.top, 0.05 + 0.07 * hh(x * 2.3), len * 1.4, [t, t, t * 0.96]);
+      continue;
+    }
     strip(x, 0.07 + 0.12 * hh(x * 2.3), 0.05 + 0.06 * hh(x * 2.9), K.top - len, K.top, DRIP, k + 50);
   }
   // damp at the foot and moss creeping up out of the soil: both edges follow a long swell with a torn fine edge (long
@@ -851,10 +885,13 @@ function cuttingWeathering(b: GeoBuilder, K: CuttingPlace, nP: number): void {
     }
   };
   const swell = (x: number) => 0.5 + 0.3 * Math.sin(x * 0.53) + 0.2 * Math.sin(x * 1.37 + 2);
-  footBand(CUT_STONE.clone().multiplyScalar(0.88), zf, (x) => 0.3 + 0.2 * swell(x) + 0.09 * (hh(x * 3.1) - 0.5), 0.3, 0.8, 7);
-  footBand(CUT_STONE.clone().multiplyScalar(0.76).lerp(DAMP, 0.4), zf + 0.001, (x) => 0.18 + 0.18 * swell(x + 2) + 0.09 * (hh(x * 3.7 + 3) - 0.5), 0.25, 0.7, 19);
-  footBand(DAMP.clone().lerp(FOOTMOSS, 0.5), zf + 0.002, (x) => 0.08 + 0.15 * swell(x + 5) + 0.09 * (hh(x * 4.3 + 1) - 0.5), 0.22, 0.6, 13);
-  footBand(FOOTMOSS, zf + 0.003, (x) => 0.01 + 0.12 * swell(x + 8) ** 2 + 0.08 * (hh(x * 5.1 + 4) - 0.5), 0.2, 0.5, 29);
+  if (stains) stains.band(K.x0, K.x1, zf + 0.006, -0.05, 0.75, 0, true);
+  else {
+    footBand(CUT_STONE.clone().multiplyScalar(0.88), zf, (x) => 0.3 + 0.2 * swell(x) + 0.09 * (hh(x * 3.1) - 0.5), 0.3, 0.8, 7);
+    footBand(CUT_STONE.clone().multiplyScalar(0.76).lerp(DAMP, 0.4), zf + 0.001, (x) => 0.18 + 0.18 * swell(x + 2) + 0.09 * (hh(x * 3.7 + 3) - 0.5), 0.25, 0.7, 19);
+    footBand(DAMP.clone().lerp(FOOTMOSS, 0.5), zf + 0.002, (x) => 0.08 + 0.15 * swell(x + 5) + 0.09 * (hh(x * 4.3 + 1) - 0.5), 0.22, 0.6, 13);
+    footBand(FOOTMOSS, zf + 0.003, (x) => 0.01 + 0.12 * swell(x + 8) ** 2 + 0.08 * (hh(x * 5.1 + 4) - 0.5), 0.2, 0.5, 29);
+  }
   // (the pilaster sides take the course lines end on, a black stripe from coping to foot: dress them plain)
   for (let i = 0; i <= nP; i++) {
     const x = K.x0 + ((K.x1 - K.x0) * i) / nP;

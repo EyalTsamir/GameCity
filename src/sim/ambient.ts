@@ -114,7 +114,10 @@ export default function create(ctx: CityContext): CityModule {
   parts.set('smoke', smoke);
   const skyline = new SkylineGrid(ctx);
   const birds = build('birds', () => createBirds(ctx, skyline));
-  if (birds) root.add(birds.mesh);
+  if (birds) {
+    root.add(birds.mesh);
+    ctx.services.ambientBirds = birds.all;
+  }
   const fowl = build('waterfowl', () => createWaterfowl(ctx));
   if (fowl) root.add(fowl.mesh);
   const sparks = build('sparks', () => createSparks(ctx));
