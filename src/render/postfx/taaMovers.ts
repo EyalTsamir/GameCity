@@ -3,6 +3,7 @@
 //
 // The simulations know where everything is, so no material has to change and no vehicle or person is drawn twice (the scene is vertex-bound):
 // one box per mover, a few thousand vertices. A pixel counts if the scene's depth there is about as far as the box.
+// Only what really moved in the last few frames: a standing vendor would take the whole stall around them along.
 
 import * as THREE from 'three';
 import type { CityContext } from '../../core/context';
@@ -17,7 +18,7 @@ void main() {
   vec3 q = position * iB;
   vec4 mv = viewMatrix * vec4( vec3( q.x * c + q.z * s, q.y, -q.x * s + q.z * c ) + iA.xyz, 1.0 );
   vZ = -( viewMatrix * vec4( iA.xyz, 1.0 ) ).z;
-  vR = length( iB );
+  vR = length( iB.xz );
   gl_Position = projectionMatrix * mv;
 }
 `;
@@ -39,6 +40,8 @@ const CAP = 1500;
 /** people further off than this are a few pixels, and they are most of the boxes */
 const PEOPLE_FAR2 = 300 * 300;
 const _clear = new THREE.Color();
+/** frames a thing that stopped stays masked */
+const HOLD = 4;
 
 /** only what's read here of the modules' services (each module types its own) */
 interface MoverServices {
@@ -58,6 +61,8 @@ export class MoverMask {
   private mat: THREE.ShaderMaterial;
   private mesh: THREE.Mesh;
   private n = 0;
+  /** where each mover was last frame */
+  private seen = new WeakMap<object, { x: number; z: number; hold: number }>();
 
   constructor(private ctx: CityContext) {
     this.target = new THREE.WebGLRenderTarget(4, 4, { depthBuffer: false, stencilBuffer: false, generateMipmaps: false, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, format: THREE.RedFormat, type: THREE.UnsignedByteType });
@@ -74,6 +79,21 @@ export class MoverMask {
     this.mat = new THREE.ShaderMaterial({ name: 'TAAMovers', uniforms: { tDepth: { value: null }, uP: { value: new THREE.Vector2() } }, vertexShader: VERT, fragmentShader: FRAG, side: THREE.BackSide, depthTest: false, depthWrite: false, blending: THREE.NoBlending, toneMapped: false });
     this.mesh = new THREE.Mesh(this.geo, this.mat);
     this.mesh.frustumCulled = false;
+  }
+
+  private moved(o: object, x: number, z: number): boolean {
+    const t = this.seen.get(o);
+    if (!t) {
+      this.seen.set(o, { x, z, hold: 0 });
+      return false;
+    }
+    if (Math.abs(x - t.x) + Math.abs(z - t.z) > 1e-4) {
+      t.x = x;
+      t.z = z;
+      t.hold = HOLD;
+      return true;
+    }
+    return t.hold > 0 && t.hold-- > 0;
   }
 
   private add(x: number, y: number, z: number, yaw: number, hx: number, hy: number, hz: number): void {
@@ -93,21 +113,21 @@ export class MoverMask {
     const s = this.ctx.services as unknown as MoverServices;
     // (a little longer than the thing: last frame's place, mirrors, a rider's elbow)
     const vehicles = s.traffic?.vehicles();
-    if (vehicles) for (const V of vehicles) this.add(V.x, 0, V.z, V.yaw, V.hw + 0.5, (V.spec?.height ?? 2) * 0.5 + 0.8, V.len * 0.5 + 0.8);
+    if (vehicles) for (const V of vehicles) if (this.moved(V, V.x, V.z)) this.add(V.x, 0, V.z, V.yaw, V.hw + 0.5, (V.spec?.height ?? 2) * 0.5 + 0.8, V.len * 0.5 + 0.8);
     const crowd = s.pedestrians?._crowd;
     if (crowd)
       for (const p of crowd.parties)
         for (const m of p.members) {
-          if (!m.present || (m.x - eye.x) ** 2 + (m.z - eye.z) ** 2 > PEOPLE_FAR2) continue;
+          if (!m.present || (m.x - eye.x) ** 2 + (m.z - eye.z) ** 2 > PEOPLE_FAR2 || !this.moved(m, m.x, m.z)) continue;
           this.add(m.x, m.y + 0.9, m.z, 0, 0.75, 1.15, 0.75);
         }
     const rail = s.rail?.sim;
     if (rail) {
       const rz = this.ctx.plan.rail.z;
-      for (const t of rail.trains) for (const c of t.cars) if (c.visible) this.add(c.x, c.y + 2, rz, 0, c.half + 0.6, 3.2, 2.2);
+      for (const t of rail.trains) for (const c of t.cars) if (c.visible && this.moved(c, c.x, rz)) this.add(c.x, c.y + 2, rz, 0, c.half + 0.6, 3.2, 2.2);
     }
     const boats = s.boats?.fleet.boats;
-    if (boats) for (const b of boats) this.add(b.x, 2, b.z, 0, 18, 9, 18);
+    if (boats) for (const b of boats) if (this.moved(b, b.x, b.z)) this.add(b.x, 2, b.z, 0, 18, 9, 18);
   }
 
   setSize(w: number, h: number): void {
