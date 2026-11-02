@@ -352,7 +352,7 @@ const writeStatus = () => {
   status.power = power;
   fs.writeFileSync(statusFile, JSON.stringify(status, null, 1));
 };
-const t0 = Date.now();
+let t0 = Date.now();
 
 // (a dynamic import: the lock lives in the main checkout's scripts/, so that a worktree queues with everyone else)
 const mainRoot = /^(.*)[\\/]\.claude[\\/]worktrees[\\/]/.exec(root)?.[1];
@@ -546,6 +546,8 @@ const runProbe = async (browser) => {
   console.log(JSON.stringify({ probed: v.length, left: todoP.length - todoP.filter((j) => res[`${j.k.id}@${j.h}`]).length, ok: v.filter((x) => x.startsWith('ok')).length, fallback: v.filter((x) => x.startsWith('none,')).length, none: v.filter((x) => x === 'none').length, errors: v.filter((x) => x.startsWith('error')).length }));
 };
 await acquireLock();
+// (--max-minutes counts from here: waiting for the lock used to eat the chunk, one chunk of 15 minutes shot a single picture)
+t0 = Date.now();
 if (args.probe) {
   const { browser } = await launchBrowser();
   try {
