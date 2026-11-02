@@ -91,6 +91,8 @@ try {
   for (const [name, q] of variants) {
     for (const h of hours) {
       const page = await browser.newPage({ viewport: { width: 1920, height: 1025 } });
+      // (no HMR: a source edit or Vite restart would reload the page mid-run)
+      await page.routeWebSocket(/.*/, () => {});
       page.on('console', (m) => m.type() === 'error' && report.errors.push(m.text()));
       page.on('pageerror', (e) => report.errors.push(String(e)));
       const url = `${base}?${['nointro', 'noidle', 'nofilm', 'adaptive=0', 'quality=high', 'weather=clear', 'time=' + h, q].filter(Boolean).join('&')}`;
