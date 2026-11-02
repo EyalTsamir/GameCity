@@ -13,6 +13,7 @@ import type { LampStyle } from './layout';
 import { boltY, boltZ, cbox, lathe, pixelText, poly, ring } from './shapes';
 import { coverBackDraw, coverDraw, kioskSignDraw, phoneSignDraw, type Printer } from './print';
 import { markProp } from '../lettering/spots';
+import { bugOn } from '../../core/sweepbugs';
 
 export const MAT = {
   paint: [0.5, 0.25],
@@ -597,7 +598,8 @@ export function mailbox(k: Kit): void {
   sh.cyl(0, 0, 0, 0.26, 0.26, 0.08, 10, 2);
   k.m('#c8262c', 'paint');
   sh.cyl(0, 0.08, 0, 0.22, 0.22, 1.05, 10, 0);
-  sh.cyl(0, 1.13, 0, 0.25, 0.25, 0.05, 10, 0);
+  // (?nopostcap) an open ring under the dome: the sky and the road came through the gap at its corners, as wedges either side of the lid
+  sh.cyl(0, 1.13, 0, 0.25, 0.25, 0.05, 10, bugOn('postcap') ? 3 : 0);
   sh.ellipsoid(0, 1.18, 0, 0.24, 0.13, 0.24, 0);
   k.m('#141414', 'paint');
   sh.box(0, 0.98, 0.215, 0.22, 0.035, 0.02, 0);

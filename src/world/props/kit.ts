@@ -8,6 +8,7 @@
 // `k` = the kit the small parts go to, `ks` = the shadow-casting kit for the big silhouettes.
 
 import { shapeOn } from '../../core/sweepshape';
+import { bugOn } from '../../core/sweepbugs';
 import { markProp } from '../lettering/spots';
 import * as THREE from 'three';
 import type { Rng } from '../../core/rng';
@@ -179,8 +180,10 @@ export function kerbCafe(k: Kit, rng: Rng, chairs?: ChairOut[]): void {
 export function aFrame(k: Kit, rng: Rng): void {
   const sh = k.sh;
   const wood = rng.pick(['#7a5236', '#3b2a20', '#2c3033']);
+  // (?noaframelean) the leaves used to lean out from their feet: a V with the gap at the top, two black slabs falling apart on the pavement
+  const lean = bugOn('aframelean') ? -0.178 : 0.19;
   for (const sgn of [1, -1]) {
-    sh.push().local(0, 0, sgn * 0.17, sgn * 0.19);
+    sh.push().local(0, 0, sgn * 0.17, sgn * lean);
     k.m(wood, 'wood');
     sh.box(0, 0.47, 0, 0.58, 0.94, 0.03, 0);
     k.m('#1f2421', 'stone');
