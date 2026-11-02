@@ -24,6 +24,8 @@ const GRIPS = sweepPeople('grips');
 const PROPP = sweepPeople('propprint');
 const GRAIN0 = sweepPeople('seamdots') ? '0.07' : '0.25';
 const GRAIN1 = sweepPeople('seamdots') ? '0.18' : '0.6';
+const CLOTHES = sweepPeople('clothes');
+const DARKLIFT = sweepPeople('clothes') ? '0.6' : '1.0';
 const HC = sweepPeople('hatcloth') ? 'true' : 'false';
 const VS_BRIM = sweepPeople('hatform') ? "{\n        // no hat brim is a flat disc: straw and cotton wander (every hat its own way), a fedora snaps down in front and rolls up at the sides, a hard hat's peak is at the front only\n        float wv = sin(phi * 2.0 + float(h3 & 63u) * 0.1) + 0.6 * sin(phi * 3.0 + float((h3 >> 6u) & 63u) * 0.1);\n        if (st == 3u || st == 7u) p.y += s * s * 0.007 * wv;\n        else if (st == 4u) p.y += s * s * (0.016 * sin(phi) * sin(phi) - 0.012 * cos(phi) + 0.004 * wv);\n        else if (st == 5u) p.xz -= rad * s * hb.x * 0.72 * (1.0 - smoothstep(0.1, 1.0, cos(phi)));\n      }" : '';
 const VS_CROWN = sweepPeople('hatform') ? "{\n        // the crown's own form: a fedora's pinch and dents, a hard hat's ridge, a beanie's turned-up cuff\n        float xn = p.x;\n        if (st == 4u) p.y -= top * top * (0.016 * exp(-xn * xn / 0.0006) + 0.006 * exp(-(abs(xn) - 0.04) * (abs(xn) - 0.04) / 0.0003) * smoothstep(-0.02, 0.05, p.z));\n        else if (st == 5u) p.y += 0.0035 * exp(-xn * xn / 0.00012) * smoothstep(0.1, 0.5, s);\n        else if (st == 6u) p.xz += rad * 0.0035 * (1.0 - smoothstep(0.26, 0.3, s));\n      }" : '';
@@ -1527,8 +1529,27 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       float f2 = sin(-nx * 1.35 + ny * 1.9 + 1.3 * sin(nx * 1.4 - pid * 0.7) + pid * 2.3);
       float wst = exp(-pow((h - 0.32) / 0.16, 2.0));
       float upper = smoothstep(0.96, 0.82, h);
+#ifdef PED_CLOSE
+      ${CLOTHES ? `
+      // (the fold set changes between back and front, at z = 0: a step in a height, drawn by the 2×2 derivatives as a row of dots down each side)
+      float sf = smoothstep(0.004, 0.02, abs(r.z));
+      fold += sf * upper * (0.0034 * f1 * f1 * f1 + 0.0026 * (0.35 + 0.65 * wst) * f2 * f2 * f2);
+      fold += sf * 0.0012 * wst * sin(ny * 11.0 + nx * 1.2 + 2.0 * f1) * smoothstep(0.2, 0.8, abs(rn.x));
+      // and what makes a top a top from a metre: small creases over the big folds, drag lines fanning from the armpit, a roll above the hem
+      fold += sf * upper * 0.0008 * sin(nx * 6.1 + ny * 4.3 + 2.0 * f2) * sin(ny * 5.3 - nx * 3.0 + f1 + pid);
+      vec2 apt = vec2(abs(r.x) - 0.2 * vPedHgt / 1.76, r.y - vPedHgt * 0.73);
+      float ar = length(apt);
+      float apA = atan(apt.y, -apt.x);
+      fold += 0.00095 * (1.0 - smoothstep(0.05, 0.17, ar)) * smoothstep(0.03, 0.06, ar) * pedRidge(apA * 1.5 + pk * 7.0);
+      if (sHem > 0.0) fold += 0.0012 * (1.0 - smoothstep(0.0, 0.1, sHem)) * sf * sin(nx * 9.0 + 1.5 * f1 + pid);
+      ` : `
       fold += upper * (0.0034 * f1 * f1 * f1 + 0.0026 * (0.35 + 0.65 * wst) * f2 * f2 * f2);
       fold += 0.0012 * wst * sin(ny * 11.0 + nx * 1.2 + 2.0 * f1) * smoothstep(0.2, 0.8, abs(rn.x));
+      `}
+#else
+      fold += upper * (0.0034 * f1 * f1 * f1 + 0.0026 * (0.35 + 0.65 * wst) * f2 * f2 * f2);
+      fold += 0.0012 * wst * sin(ny * 11.0 + nx * 1.2 + 2.0 * f1) * smoothstep(0.2, 0.8, abs(rn.x));
+#endif
     }
     float fx = r.x * 1.76 / max(vPedHgt, 0.5);
     float frontK = smoothstep(0.35, 0.6, rn.z);
@@ -1571,11 +1592,30 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
     float hm = sHem * vPedHgt * (reg > 2.5 ? 0.47 : 0.33); // ≈ m from the hem along the limb
     pc *= 1.0 - det * uPedFolds * (0.5 * exp(-max(-hm, 0.0) / 0.012) * step(hm, 0.0) - 0.07 * pedBand2(hm - 0.003, 0.0025, px * 2.0));
   }
+#ifdef PED_CLOSE
+  ${CLOTHES ? `
+  if (reg > 0.5 && reg < 1.5 && h < 0.5) {
+    // where a top ends over the trousers it stands off them: its shadow below the edge; a shirt tucked in has a belt with a buckle
+    float hmT = sHem * vPedHgt * 0.4;
+    if (hmT < 0.0) {
+      bool beltOn = (vPedFB & 64u) != 0u && hmT > -0.03;
+      if (beltOn) {
+        pc = mix(pc, vec3(0.03, 0.022, 0.018) + 0.05 * step(fract(pk * 7.0), 0.4) * vec3(0.5, 0.3, 0.16), 0.96);
+        float bx = r.x * 1.76 / max(vPedHgt, 0.5);
+        float bm = (1.0 - smoothstep(0.016, 0.018, abs(bx))) * (1.0 - smoothstep(0.0115, 0.0135, abs(hmT + 0.015))) * step(0.0, rn.z);
+        pc = mix(pc, vec3(0.5, 0.48, 0.44), bm);
+      }
+      pc *= 1.0 - det * 0.42 * exp(hmT / 0.01);
+    }
+    pc *= 1.0 + det * 0.05 * (1.0 - smoothstep(0.002, 0.006, abs(hmT - 0.003)));
+  }
+  ` : ''}
+#endif
   // folds: occlusion in the troughs, a little light on the ridges
   pc *= mix(1.0, 1.0 - 70.0 * max(-fold, 0.0) + 22.0 * max(fold, 0.0), det * cloth * uPedFolds);
   // dark cloth in shade: the crests catch the sky (a grey lift), so navy / black / olive trousers show folds too
   float darkC = 1.0 - smoothstep(0.08, 0.3, dot(pc, vec3(0.33)));
-  pc += vec3(0.03, 0.032, 0.036) * clamp(fold / 0.0025, 0.0, 1.0) * darkC * det * cloth * uPedFolds;
+  pc += vec3(0.03, 0.032, 0.036) * ${DARKLIFT} * clamp(fold / 0.0025, 0.0, 1.0) * darkC * det * cloth * uPedFolds;
 #ifdef PED_CLOSE
   // (seams one or two pixels wide: as a height they came out as a row of dots from the 2×2 derivatives)
   pedFabH = ((sh - 1.0) * ${SEAMH} + wv * wvK * (knit ? 0.0001 : 0.00004) + fold * uPedFolds) * pedFabK;
@@ -2131,7 +2171,24 @@ const FRAG_COLOR = /* glsl */ `
 #ifdef PED_CLOSE
       if (abs(vPedReg - ${R.TORSO}.0) < 0.5 && vPedH > 0.94) pc = pedNeckline(pc);
       // bare limbs are lit as the hand they run into is (the region is flat: at the wrist the two lights alternated triangle by triangle, in flames)
-      if (vPedReg > 1.5 && vPedReg < 3.5 && vPedS < 0.0) { pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; pedFabK = 0.0; }
+      if (vPedReg > 1.5 && vPedReg < 3.5 && vPedS < 0.0) {
+        pedSkinK = 1.0; pedSpecK = 0.16; pedGloss = 20.0; pedFabK = 0.0;
+        ${CLOTHES ? `
+        // bare legs into a shoe: socks on most (a rib, a band at the top), their colour goes with the person
+        if (vPedReg > 2.5) {
+          uint sh0 = vPedFC.y >> 3u;
+          float sTop = 0.098 + 0.03 * float(sh0 & 3u) * 0.5;
+          if (vPedH < sTop && float((sh0 >> 2u) & 15u) / 15.0 < 1.05 - 0.75 * vPedHairW.w) {
+            float sc = float((sh0 >> 6u) & 3u);
+            vec3 sock = sc < 1.5 ? vec3(0.62, 0.61, 0.58) : sc < 2.5 ? vec3(0.14, 0.14, 0.15) : vec3(0.05, 0.07, 0.13);
+            float ang2 = atan(vPedRest.x, vPedRest.z) * 13.0;
+            sock *= 0.92 + 0.08 * sin(ang2 * 6.2832 * 0.25) * (1.0 - smoothstep(0.2, 0.5, fwidth(ang2)));
+            pc = sock * (1.0 - 0.2 * smoothstep(sTop - 0.012, sTop, vPedH));
+            pedSkinK = 0.0; pedSpecK = 0.0;
+          }
+        }
+        ` : ''}
+      }
       // where pelvis and thighs cut each other they are plain cloth with one normal field: no line shows
       float hipZ = abs(vPedReg - ${R.TORSO}.0) < 0.5 ? (vPedS < 0.0 ? 1.0 - smoothstep(0.14, 0.2, vPedH) : 0.0) : abs(vPedReg - ${R.LEG}.0) < 0.5 ? smoothstep(0.78, 0.85, vPedH) : 0.0;
       if (hipZ > 0.0) {

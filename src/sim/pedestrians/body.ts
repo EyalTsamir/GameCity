@@ -1310,9 +1310,26 @@ function buildLeg(b: MeshBuilder, d: Dims, cfg: LodCfg, side: 1 | -1): void {
     }
     rings.push({ ids, c: ft(f.cx * side, yc, f.z) });
   }
+  // close: the toe rounds off in plan and in section, a little sprung off the ground (it ended on a wide ring and a fan: a square-cut box)
+  if (cfg.close && sweepPeople('shoes')) {
+    const fT = fr[cfg.foot[cfg.foot.length - 1]];
+    const k = d.H / 1.76;
+    for (const [dz, w, hh2, lift] of [[0.0055, 0.9, 0.93, 0.0015], [0.0115, 0.7, 0.82, 0.003], [0.0155, 0.42, 0.62, 0.0045]] as [number, number, number, number][]) {
+      const yc = (fT.y0 + fT.y1) / 2 + lift - (fT.y1 - fT.y0) * (1 - hh2) * 0.3,
+        hh = ((fT.y1 - fT.y0) / 2) * hh2;
+      const ids: number[] = [];
+      for (let kk = 0; kk < sides; kk++) {
+        const phi = (kk / sides) * Math.PI * 2;
+        const x = fT.cx * side + fT.w * w * se(Math.sin(phi), 2.4) * side;
+        const y = yc + hh * se(Math.cos(phi), 3);
+        ids.push(b.v(ft(x, y, fT.z + dz * k), 0.3 + 0.3 * (1 + Math.cos(phi)), 0, se(Math.sin(phi), 3), 1));
+      }
+      rings.push({ ids, c: ft(fT.cx * side, yc, fT.z + dz * k) });
+    }
+  }
   bridge(b, rings);
   const f0 = fr[cfg.foot[0]],
-    f1 = fr[cfg.foot[cfg.foot.length - 1]];
+    f1 = cfg.close && sweepPeople('shoes') ? { ...fr[cfg.foot[cfg.foot.length - 1]], z: fr[cfg.foot[cfg.foot.length - 1]].z + 0.016 * (d.H / 1.76), y0: fr[cfg.foot[cfg.foot.length - 1]].y0 + 0.004, y1: fr[cfg.foot[cfg.foot.length - 1]].y0 + 0.02 } : fr[cfg.foot[cfg.foot.length - 1]];
   const heel = b.v(ft(f0.cx * side, (f0.y0 + f0.y1) / 2 - 0.004, f0.z - 0.008 * (d.H / 1.76)), 0.3, 0);
   capFan(b, rings[0], heel, ft(f0.cx * side, (f0.y0 + f0.y1) / 2, f0.z + 0.03));
   const toe = b.v(ft(f1.cx * side, (f1.y0 + f1.y1) / 2 - 0.001, f1.z + 0.005 * (d.H / 1.76)), 0.3, 0);
