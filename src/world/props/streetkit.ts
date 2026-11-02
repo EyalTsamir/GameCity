@@ -1036,7 +1036,10 @@ export function gutterDrift(kd: Kit, rng: Rng): void {
     for (let i = 0; i < n; i++) {
       kd.m(rng.pick(['#5e5a50', '#66604f', '#55524a', '#6e6654']), 'stone');
       sh.push().local(rng.range(-0.25, 0.25), 0.001 + i * 0.0006, rng.range(-0.03, 0.03), 0, rng.range(-0.25, 0.25), 0);
-      sh.box(0, 0, 0, rng.range(0.2, 0.75), 0.001, rng.range(0.04, 0.12), top);
+      // (the grit was a flat olive plank on the road. The road's own silt and the near grit are the drift now; the dice still fall, so nothing after it moves)
+      const gw = rng.range(0.2, 0.75),
+        gd = rng.range(0.04, 0.12);
+      if (!wearOn('wearpave')) sh.box(0, 0, 0, gw, 0.001, gd, top);
       sh.pop();
     }
   }

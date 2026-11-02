@@ -549,7 +549,11 @@ vec3 rdHard(inout float rough) {
     float line = 1.0 - smoothstep(0.0, 0.045, d);
     float silt = (1.0 - smoothstep(0.04, 0.22, d)) * smoothstep(0.35, 0.7, nM.r * 0.6 + nS.g * 0.4);
     c *= 1.0 - 0.38 * line;
+#ifdef RD_WEARPAVE
+    c = mix(c, c * vec3(0.8, 0.73, 0.6), silt * 0.8);
+#else
     c = mix(c, c * vec3(0.86, 0.79, 0.67), silt * 0.55);
+#endif
     rough -= 0.25 * line;
 #ifdef RD_LITTER
     vec4 lt = rdLitter(p, max(fwp.x, fwp.y) + 1e-5, 0.45 * (1.0 - smoothstep(0.05, 0.25, d)), 0.8);
