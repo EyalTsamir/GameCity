@@ -96,6 +96,7 @@ void main() {
   float hA = 1.0;
   vec3 aim = cur;
   vec3 last = vec3(0.0);
+  float dm = 0.0;
   float d = texelFetch(tDepth, p, 0).x;
   if (uMode > 2.5) {
     vec4 settled4 = texelFetch(tHistory, p, 0);
@@ -108,8 +109,15 @@ void main() {
     float w = settled4.a > 0.9 && abs(z - z0) < z0 * 0.01 ? 1.0 - smoothstep(0.03, 0.1, m) : 0.0;
     aim = clamp(cur + w * (settled - under), 0.0, 1.0);
     vec4 l = texelFetch(tLast, p, 0);
-    if (w > 0.999 || uCalm > 0.99 || l.a < 0.1) {
+    if (uCalm > 0.99 || l.a < 0.1) {
       gl_FragColor = vec4(aim, l.a < 0.1 ? 0.34 : 1.0);
+      return;
+    }
+    vec3 dl = abs(aim - l.rgb);
+    dm = max(dl.r, max(dl.g, dl.b));
+    // (less than the screen can show, half-resolution AO re-rolling on a leaf: nothing happened. Exactly the same picture)
+    if (dm < 0.003) {
+      gl_FragColor = vec4(l.rgb, 1.0);
       return;
     }
     last = l.rgb;
@@ -157,7 +165,7 @@ void main() {
   vec3 mean = m1 / 9.0;
   vec3 sigma = sqrt(max(m2 / 9.0 - mean * mean, vec3(0.0)));
   // while the camera rests a wider window: a detail finer than a pixel is in some frames' neighbourhood only
-  float gamma = uMode > 2.5 ? 1.25 : uMode > 0.5 ? 2.5 : mix(1.5, 0.8, smoothstep(0.0, 2.0, speed));
+  float gamma = uMode > 2.5 ? mix(2.5, 1.25, smoothstep(0.02, 0.1, dm)) : uMode > 0.5 ? 2.5 : mix(1.5, 0.8, smoothstep(0.0, 2.0, speed));
   vec3 lo = mean - gamma * sigma - 0.002;
   vec3 hi = mean + gamma * sigma + 0.002;
   vec3 h = toY(uMode > 2.5 ? last : speed < 0.01 ? texelFetch(tHistory, p, 0).rgb : historyCR(huv));
