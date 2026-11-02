@@ -1524,7 +1524,8 @@ vec3 pedFabric(vec3 pc, float reg, float h, float sHem) {
       float sn = rn.z * 0.07; // ≈ m across the seam line (7 cm leg radius)
       float sk = 1.0 - smoothstep(0.85, 0.89, h);
 #ifdef PED_CLOSE
-      fold += sk * 0.0002 * smoothstep(-0.001, 0.002, sn) * (1.0 - smoothstep(0.005, 0.01, sn));
+      // (a step of 2 mm in a height: glinting dashes all down the leg)
+      ${sweepPeople('seamdots') ? '' : 'fold += sk * 0.0002 * smoothstep(-0.001, 0.002, sn) * (1.0 - smoothstep(0.005, 0.01, sn));'}
 #else
       fold += sk * (0.0006 * smoothstep(-0.001, 0.002, sn) * (1.0 - smoothstep(0.005, 0.01, sn)) + 0.00035 * sin(h * L * 420.0) * exp(-pow(sn / 0.005, 2.0)));
 #endif
