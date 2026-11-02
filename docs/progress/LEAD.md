@@ -3,6 +3,33 @@
 Read this first when resuming after an interruption (usage limits have cut runs before).
 Per-module logs live next to this file: `docs/progress/<module>.md`.
 
+## Stage 4, first fixes merged (2026-11-02) — see sweep-flicker.md, sweep-white.md, sweep-wear.md, sweep-shape.md, city-sweep.md
+
+Merged at 6a6b733, bake fix 4a64ee4. The sweep's first families, fixed by system while its capture still runs (judges' lists: `docs/progress/sweep-findings.md` on the city-sweep branch).
+
+- **Trembling, second pass:** the market canopy's z-fight, moving grey patches on stalls, more kinds under the mover mask. Before that, 436dbb2: temporal AA tore and doubled everything that moves, a bus with two fronts, on the published page from 02:50 to about 07:00 on 2.11. The flicker test hid traffic and people, so it passed; the pilot's pictures caught it. What moves now keeps no history (`src/render/postfx/taaMovers.ts`). **Nobody has watched any of it at real speed.**
+- **Square-on walls** (`sweep-white.md`): the depth pre-pass rounded differently from the facade, so a wall square to the camera failed its depth test and showed white or the background. 70/336 bad poses → 0/336, the walk flash at x −35, z 108.25 is gone. Such a wall now pays for its real shading: +8 ms on that one view, not a regression.
+- **Noon dots:** no motes under a high sun; aviation lights dim by day, on masts.
+- **Cracks, stains, rust, rock** (`sweep-wear.md`): grown cracks that fork and taper instead of black squiggles, stains that multiply what is drawn instead of flat quads, rock broken along its beds.
+- **No naked shapes** (`sweep-shape.md`): an edge term in the final pass (corners catch light and wear, seams hold dirt, near only) and two passes over props: sacks, carts, crops, bandstand, benches, waterfowl.
+
+**Stale bakes, a trap I set.** `scripts/bake.mjs` asked for port 5198 and waited for it to answer. My static server of the previous merge held that port, so the bake fingerprinted the old build and said "up to date". The page ignored those files and drew procedurally: downtown noon read 41.1 ms instead of 33. Fixed: its own dev server on a free port. Absolute numbers from sessions that baked while 5198 was up are suspect; A/B inside one page isn't.
+
+Checks on the production build, behind the power guard (ui-test, hitch and the rest ran on the build with the stale bake; the code is the same): typecheck; overview twice, medium, low, diorama, night invariants `{}`, validate `[]`, console errors none; ui-test 74/74; hitch no mid-run programs; rerun after the real bake on downtown, clean.
+
+Cost, cad1ddd → 4a64ee4, same session, 2 + 2, real bake, ms:
+
+| view | 12 | 18.2 | 21.5 |
+|---|---|---|---|
+| overview | 33.9 → 34.4 | 32.8 → 34.2 | 34.3 → 35.5 |
+| downtown | 31.9 → 33.0 | 31.0 → 32.2 | 33.5 → 34.3 |
+| street | 40.1 → 40.9 | 38.1 → 40.1 | 39.0 → 41.2 |
+| market | 38.0 → 39.6 | 35.7 → 37.3 | 39.9 → 40.6 |
+
+Mean +1.27; the second merged run read about 0.8 above the first, so take it as about +1. The street sits at 24–25 fps, below the 27–28 the user accepted. TAA cost: `?notaa` saved −0.17 and +0.32 ms over the views, `?nowindfade` +0.22 and +0.18, neither above noise. Switch runs: `?nosweepshape` about 0, `?noprepasssame` about 0. `?nowearcrack` and `?nosweepwear` lose the facade bake, so they can't measure cost.
+
+Seen by eye, left for the next pass: a planter's trailing cards float in dark blocks behind it, rubbish sacks are faceted black lumps (`close12/furn-planter`), the warehouse wall sits very dark at noon. Publishing to Pages waits: the harness paused my messages to sessions until the user's next message, and it goes through the github-pages session.
+
 ## Close-up second round merged (2026-11-02) — see sweep-flicker.md, close-hand.md, close-windows.md, close-nature.md, close-vehicles.md, close-life.md
 
 Merged at 47b1e0e, windows' log at 703f8d1. Each stage 3 session finished its Left list as far as the queue allowed, and the trembling got its first fixes, because the user asked for it above stage 4: "almost nowhere in the city is there nothing trembling".
