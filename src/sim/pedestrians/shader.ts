@@ -18,6 +18,8 @@ const HEMC = sweepPeople('hairhem') ? 'true' : 'false';
 const CURLS = sweepPeople('curls');
 const SOFTLINE = sweepPeople('softline');
 const HF_LIFT = sweepPeople('hairfall') ? '1.0' : '0.0';
+const FENEED = sweepPeople('hairfall') ? '0.0' : '0.2';
+const HEMTUCK = sweepPeople('hairfall') ? '0.0' : '0.3';
 const FE0 = sweepPeople('hairfall') ? '0.66' : '0.98';
 const SEAMH = sweepPeople('seamdots') ? '0.0004' : '0.0014';
 const GRIPS = sweepPeople('grips');
@@ -570,7 +572,12 @@ void pedPose(inout vec3 p, inout vec3 n) {
       vPedRest.y += ${HF_LIFT} * lift;
 //@endif
       // rows lifted to the hem tuck in under it (into the hair / body) instead of rolling out as a shelf
+//@if CL
+      // (rows past the hem lie along it, no roll under: the fold z-fought with its own inner face as a patch of scratches at the jaw)
+      p.xz = mix(p.xz, vec2(0.0, -0.01), ${HEMTUCK} * smoothstep(0.0, 0.03, lift));
+//@else
       p.xz = mix(p.xz, vec2(0.0, -0.01), 0.3 * smoothstep(0.0, 0.03, lift));
+//@endif
       float dep = min(aux.x, L2);
       // FS: distance from the tips (locks separate and thin there) + angle (the front edges thin out)
       // (only hair long enough to have ends of its own breaks up: on a short bob all of the sheet is near the tips)
@@ -2070,7 +2077,8 @@ const FRAG_COLOR = /* glsl */ `
 #endif
       float edgeK = 1.0 - smoothstep(1.17, 1.45, vPedFace.y);
 #ifdef PED_CLOSE
-      float need = max(tipK, (1.0 - smoothstep(${FE0}, ${FE0} + 0.16, vPedFace.y)) * 0.2) * (1.0 - far);
+      // (the sheet's front edge stays whole: slits along it read as a torn curtain over the cheek)
+      float need = max(tipK, (1.0 - smoothstep(${FE0}, ${FE0} + 0.16, vPedFace.y)) * ${FENEED}) * (1.0 - far);
 #else
       float need = max(tipK, edgeK * 0.65) * (1.0 - far);
 #endif
