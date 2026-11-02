@@ -65,7 +65,7 @@ Cost, measured by switching `live` in one page (`abprof`, 6 cycles, ms, on mains
 | `?noshapedumpster` | dumpsters: soft body, round castors; near only pressed ribs, rolled rim, trunnions, fork pockets, lid ribs and handles, a number, scrapes |
 | `?noshaperope` | rope coils: a heap from afar, turn by turn near with the free end across the ground |
 | `?noshapepots` | crab pots open cages of hoops and line, netting and an entrance eye near, no solid block of colour; net heaps with folds and a float line |
-| `?noshapepipes` | pipe stacks round with flanges and a bore in shade, wedges, a strap; used sleepers near: checks, end splits, plate marks, bolt holes |
+| `?noshapepipes` | pipe stacks round with flanges and a bore in shade, wedges; used sleepers near: checks, end splits, plate marks, bolt holes |
 | `?noshapetrolley` | luggage trolleys in bent tube and wire, a handle, four wheels |
 
 The sacks (filled, `softBlob`) sit under the older `?nohandyard`.
@@ -83,6 +83,21 @@ The first perf run showed +500 k triangles and +31 draws at overview. The per-me
 | street (5, 1.5, -65) | 39.41, 3.907 M, 344 | 38.77, 4.646 M, 383 |
 
 No time cost readable within the noise (the earlier baseline-first market 51.71 against 37.58 was cold-page bias). Street's +739 k triangles and +39 draws are near and fine cells coming in; at 2.5 ns they would be about 1.8 ms by estimate although not seen in this run, so it is measured again at the end.
+
+Measured again at `241fc22`, rebaked, on mains, `?nosweepshape` first and then the baseline, one run per view (ms, triangles, draws):
+
+| view | off | on | difference | budget |
+|---|---|---|---|---|
+| overview | 33.47, 3.212 M, 228 | 34.16, 3.907 M, 259 | +0.69 ms, +694 k | +0.2 |
+| downtown | 31.84, 4.057 M, 255 | 32.20, 4.143 M, 239 | +0.36 ms, +85 k | +0.2 |
+| market | 38.34, 3.991 M, 286 | 37.08, 4.212 M, 286 | -1.26 ms, +221 k | +0.7 |
+| street (5, 1.5, -65) | 37.20, 4.487 M, 383 | 37.75, 4.858 M, 383 | +0.55 ms, +371 k | +0.7 |
+
+Overview and downtown are over the budget in this run. Not settled: reloads carry ±1-2 ms, and the draw counts differ in opposite directions (overview 31 more with the switch on, downtown 16 fewer), so part of it is page state again, as in the first run. The triangles at market and street are the real cost, about 0.55 and 0.9 ms at 2.5 ns. An `abprof.mjs` A/B cannot be used for this switch, it acts at build time; the way to settle it is several reversed runs per view.
+
+Same run: invariants `{}`, validate `[]`, no console errors at overview, `?diorama`, medium and low; `hitch.mjs` 0 new programs everywhere, one 100 ms frame arriving at overview 21.5.
+
+Stopped before the end on 2026-11-02 (the machine was needed): `ui-test.mjs`, `npm run build` and the last look at rope, iced fish, vending front, IBC and sleepers after their last edits did not run.
 
 ## Not a defect
 
