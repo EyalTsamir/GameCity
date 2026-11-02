@@ -127,6 +127,31 @@ night glass near the camera; shop doors lit like the shop.
    mid-room card is. One extra atlas fetch only where the ray meets the figure, a few floats on other shop pixels. `?nocwwalk`, medium and up. Seen
    moving across two panes of the restaurant over 8 s at 8 m, 21.5. Not seen on a real walk or at 1 m.
 
+## Cost hunt (2026-11-02, limit 03:30): cause narrowed, cost NOT cut
+
+Same page, baked, on AC, merged build with TAA. Tools: page code swapping the rooms material's `defines` (three keeps compiled programs, so a
+compile-time switch can be A/B'd in one page), and `uCloseWin` set by hand.
+
+On minus off now, no-discard in (ms):
+
+| view | noon | 21.5 | budget |
+|---|---|---|---|
+| overview | -0.09 ±0.24 | -0.16 ±0.14 | 0.2 |
+| downtown | -0.26 ±0.21 | 0.06 ±0.14 | 0.2 |
+| street | **1.84 ±0.51** | **1.55 ±0.66** | 0.7 |
+| market | 0.12 ±0.56 | 0.69 ±0.11 | 0.7 |
+| shop from 4 m | 1.42 ±0.17 | 6.01 ±0.02 | |
+
+What was found:
+- Shop at night: rooms hidden saves only 0.5-0.6 ms; `uCloseWin` = 0 saves 5-7 ms. So most of it is the facade at `cwK` = 1, not the rooms. `uCloseWin` = 0.01 (cwK 0 everywhere, the near-glint block still runs) saves the same, so it is not the near glint. 1000 (cwK 1 everywhere) adds nothing, so it comes from near panes. At noon the value makes no difference.
+- This is the wrong way round on paper: `cwK` = 1 skips `bhShop`/`bhRoom`, and a pane should get cheaper.
+- **The lead:** one run (ab3, `?bdbg=x`, `bool cwOff = cwK >= 0.999 && uBhDebug > -0.5`, the same with `uBhDebug` on `interior *= 1 - cwK` and the night dimming) had the shop at night at base 35-38 ms against 42-45 in every other run, with the 5-7 ms gap gone, and running the interior cost +1.1 to +1.6 as it should. Without those edits (ab4) the gap came back, so it is not the no-discard. The fix is probably in how the facade program compiles (FXC, the perf-deep gates: `FG_DBG_OFF` folds `uBhDebug`). `?bdbg` and the `cwOff` expression were not separated. Next: one 3-minute abprof with only the `cwOff` expression, then only `?bdbg`.
+- Street: rooms hidden saves 1.2-1.9 ms, returning black at the top of the fragment shader only 0.2-0.5, so about half or more looks like vertices, draws and varyings (noisy; not proved). `r17` (radius 17 m) saved 1.1-1.9 ms there. Next: drop windows from the vertex work early, or shrink the radius for upper floors.
+- Ruled out at street level, each within noise: walker, sun patches, relief, cards. At the shop by noon: cards -1.5 ±1.0, no-discard -1.13 ±0.29, relief -0.87 ±0.72, sun -0.81 ±1.1.
+- The number of wall pages was not A/B'd: dealing changes which atlas cell a pixel reads, not how many.
+
+Kept: rooms return black instead of `discard` (additive, so by construction the same picture; not compared in a capture).
+
 ## Left
 
 - Lobby floor in `buildings/lobby.ts`: the checks read oversized from 1 m (`door-office`). Not part of this work.
